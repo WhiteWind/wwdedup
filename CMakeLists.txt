@@ -7,6 +7,5 @@ aux_source_directory(. SRC_LIST)
 aux_source_directory(easySQLite SRC_LIST)
 
 add_executable(${PROJECT_NAME} ${SRC_LIST})
-
 target_link_libraries(fuse-dedup -lfuse -ldl -lpthread)
 include_directories(fuse-dedup PRIVATE easySQLite)

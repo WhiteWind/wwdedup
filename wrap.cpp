@@ -49,6 +49,9 @@ int wrap_utime(const char *path, struct utimbuf *ubuf) {
 int wrap_open(const char *path, struct fuse_file_info *fileInfo) {
         return DedupFS::Instance()->Open(path, fileInfo);
 }
+int wrap_create(const char *path, mode_t mode, struct fuse_file_info *fileInfo) {
+        return DedupFS::Instance()->Create(path, mode, fileInfo);
+}
 int wrap_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
         return DedupFS::Instance()->Read(path, buf, size, offset, fileInfo);
 }

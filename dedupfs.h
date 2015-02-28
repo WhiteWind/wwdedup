@@ -47,6 +47,7 @@ public:
 	int Truncate(const char *path, off_t newSize);
 	int Utime(const char *path, struct utimbuf *ubuf);
 	int Open(const char *path, struct fuse_file_info *fileInfo);
+        int Create(const char *path, mode_t mode, struct fuse_file_info *fileInfo);
 	int Read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo);
 	int Write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo);
 	int Statfs(const char *path, struct statvfs *statInfo);

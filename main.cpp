@@ -25,6 +25,7 @@ int main(int argc, char *argv[]) {
 	examplefs_oper.truncate = wrap_truncate;
 	examplefs_oper.utime = wrap_utime;
 	examplefs_oper.open = wrap_open;
+        examplefs_oper.create = wrap_create;
 	examplefs_oper.read = wrap_read;
 	examplefs_oper.write = wrap_write;
 	examplefs_oper.statfs = wrap_statfs;

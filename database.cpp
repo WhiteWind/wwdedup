@@ -22,8 +22,7 @@ Field definition_fileBlocks[] =
 Field definition_files[] =
 {
     Field(FIELD_KEY),
-    Field("parent_id", type_int, flag_not_null),
-    Field("name", type_text, flag_not_null),
+    Field("path", type_text, flag_not_null),
     Field("size", type_int, flag_not_null),
     Field("mode", type_int, flag_not_null),
     Field("mtime", type_int, flag_not_null),
@@ -37,12 +36,18 @@ DataBase::DataBase()
     //define table object
     Table tbBlockHashes(db.getHandle(), "block_hashes", definition_blockHashes);
 
-    //remove table from database if exists
-    if (tbBlockHashes.exists())
-        tbBlockHashes.remove();
-
     //create new table
     tbBlockHashes.create();
+
+    Table tbFileBlocks(db.getHandle(), "file_blocks", definition_fileBlocks);
+
+    //create new table
+    tbFileBlocks.create();
+
+    Table tbFiles(db.getHandle(), "files", definition_files);
+
+    //create new table
+    tbFiles.create();
 }
 
 void DataBase::test()
@@ -86,6 +91,16 @@ void DataBase::test()
 }
 
 DataBase::~DataBase()
+{
+
+}
+
+int DataBase::stat(std::string path, struct stat* statbuf)
+{
+  return -ENOENT;
+}
+
+int DataBase::create(std::string path, mode_t mode)
 {
 
 }

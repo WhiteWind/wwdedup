@@ -5,7 +5,7 @@ using namespace sql;
 Field definition_blockHashes[] =
 {
     Field(FIELD_KEY),
-    Field("hash", type_text, flag_not_null | flag_unique),
+    Field("hash", type_blob, flag_not_null | flag_unique),
     Field("use_count", type_int, flag_not_null),
     Field(DEFINITION_END),
 };
@@ -15,7 +15,7 @@ Field definition_fileBlocks[] =
     Field(FIELD_KEY),
     Field("file_id", type_int, flag_not_null),
     Field("offset", type_int, flag_not_null),
-    Field("hash", type_text, flag_not_null),
+    Field("hash", type_blob, flag_not_null),
     Field(DEFINITION_END),
 };
 
@@ -53,6 +53,9 @@ DataBase::DataBase()
 void DataBase::test()
 {
   Table tbBlockHashes(db.getHandle(), "block_hashes", definition_blockHashes);
+
+  tbBlockHashes.truncate();
+
   //define new record
   Record record(tbBlockHashes.fields());
 
@@ -72,7 +75,7 @@ void DataBase::test()
   //select record to update
   if (Record* record = tbBlockHashes.getRecordByKeyId(2))
   {
-          record->setString("hash", "Frank");
+          record->setString("hash", "Frank\x01yo\0\x02nigga");
           record->setInteger("use_count", 2);
 
           tbBlockHashes.updateRecord(record);
@@ -101,6 +104,11 @@ int DataBase::stat(std::string path, struct stat* statbuf)
 }
 
 int DataBase::create(std::string path, mode_t mode)
+{
+
+}
+
+int DataBase::unlink(std::string path)
 {
 
 }

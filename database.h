@@ -19,6 +19,7 @@ public:
 
     int stat(std::string path, struct stat* statbuf);
     int create(std::string path, mode_t mode);
+    int unlink(std::string path);
 };
 
 #endif // DATABASE_H

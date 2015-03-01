@@ -30,6 +30,7 @@ public:
 
 public:
 	string asString();
+        string asBlob();
 	integer asInteger();
 	double asDouble();
 	bool asBool();
@@ -38,6 +39,7 @@ public:
 public:
 	void setNull();
 	void setString(string value);
+        void setBlob(string value);
 	void setInteger(integer value);
 	void setDouble(double value);
 	void setBool(bool value);

@@ -40,6 +40,7 @@ bool Value::equals(Value& value)
 	{
 	case type_int:
 		return (asInteger() == value.asInteger());
+        case type_blob:
 	case type_text:
 		return (asString().compare(value.asString()) == 0);
 	case type_float:
@@ -61,9 +62,13 @@ void Value::setValue(char* value, field_type type)
 
 	if (value)
 	{
-		_isNull = false;
-		_value = value;
-		_type = type;
+                _type = type;
+                _isNull = false;
+                if (type == type_blob) {
+
+                } else
+                      _value = value;
+
 	}
 }
 
@@ -72,8 +77,11 @@ string Value::toSql(field_type type)
 	if (isNull())
 		return "null";
 
-	if (type == type_text)
+        if (type == type_text)
 		return "'" + quoteStr(asString()) + "'";
+
+        if (type == type_blob)
+                return "x'" + binToHex(_value.c_str(), _value.length()) + "'";
 
 	if (_type == type_time)
 		return intToStr(asInteger());
@@ -98,6 +106,17 @@ string Value::asString()
 	}
 
 	return _value;
+}
+
+string Value::asBlob()
+{
+        if (_type == type_time)
+        {
+                time t(asInteger());
+                return t.asString();
+        }
+
+        return _value;
 }
 
 integer Value::asInteger()
@@ -140,6 +159,12 @@ void Value::setString(string value)
 {
 	_isNull = false;
 	_value = value;
+}
+
+void Value::setBlob(string value)
+{
+        _isNull = false;
+        _value = value;
 }
 
 //CRT_SECURE_NO_WARNINGS

@@ -72,6 +72,7 @@ string Field::getTypeStr()
 	case type_float: return "REAL";
 	case type_bool: return "INTEGER";
 	case type_time: return "INTEGER";
+        case type_blob: return "BLOB";
 	}
 	return "";
 }
@@ -139,6 +140,9 @@ Field* Field::createFromDefinition(string value)
 
 		if (type.compare("REAL") == 0)
 			_type = type_float;
+
+                if (type.compare("BLOB") == 0)
+                        _type = type_blob;
 	}
 
 	//parse optional flags

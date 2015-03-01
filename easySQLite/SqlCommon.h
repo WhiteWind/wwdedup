@@ -34,6 +34,7 @@ enum field_type
 	type_float,
 	type_bool,
 	type_time,
+        type_blob,
 };
 
 	
@@ -146,6 +147,7 @@ string intToStr(integer value);
 string quoteStr(string value);
 
 string binToHex(const char* buffer, int size);
+string hexToBin(const char* input);
 
 string generateSHA(string& value);
 

@@ -51,6 +51,7 @@ public:
 public:
 	void setNull(int index);
 	void setString(int index, string value);
+        void setBlob(int index, string value);
 	void setInteger(int index, integer value);
 	void setDouble(int index, double value);
 	void setBool(int index, bool value);

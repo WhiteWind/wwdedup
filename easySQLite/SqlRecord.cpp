@@ -122,6 +122,12 @@ void Record::setString(int index, string value)
 		v->setString(value);
 }
 
+void Record::setBlob(int index, string value)
+{
+        if (Value* v = getValue(index))
+                v->setBlob(value);
+}
+
 void Record::setInteger(int index, integer value)
 {
 	if (Value* v = getValue(index))

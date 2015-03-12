@@ -1,8 +1,8 @@
 #include "wrap.h"
 #include "dedupfs.h"
 
-void set_rootdir(const char *path) {
-        DedupFS::Instance()->setRootDir(path);
+void set_database(void *_db) {
+        DedupFS::Instance()->SetDataBase(_db);
 }
 
 int wrap_getattr(const char *path, struct stat *statbuf) {

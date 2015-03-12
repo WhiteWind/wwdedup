@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-void set_rootdir(const char *path);
+void set_database(void *_db);
 
 int wrap_getattr(const char *path, struct stat *statbuf);
 int wrap_readlink(const char *path, char *link, size_t size);

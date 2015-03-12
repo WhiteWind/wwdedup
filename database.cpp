@@ -23,16 +23,19 @@ Field definition_files[] =
 {
     Field(FIELD_KEY),
     Field("path", type_text, flag_not_null),
+    Field("depth", type_int, flag_not_null),
     Field("size", type_int, flag_not_null),
     Field("mode", type_int, flag_not_null),
+    Field("uid", type_int, flag_not_null),
+    Field("gid", type_int, flag_not_null),
     Field("mtime", type_int, flag_not_null),
     Field("ctime", type_int, flag_not_null),
     Field(DEFINITION_END),
 };
 
-DataBase::DataBase()
+DataBase::DataBase(const char *db_url)
 {
-    db.open("test.db");
+    db.open(db_url);
     //define table object
     Table tbBlockHashes(db.getHandle(), "block_hashes", definition_blockHashes);
 
@@ -95,12 +98,12 @@ void DataBase::test()
 
 DataBase::~DataBase()
 {
-
+  db.close();
 }
 
-int DataBase::stat(std::string path, struct stat* statbuf)
+int DataBase::fstat(std::string path, struct stat* statbuf)
 {
-  return -ENOENT;
+  return -1;
 }
 
 int DataBase::create(std::string path, mode_t mode)
@@ -112,4 +115,20 @@ int DataBase::unlink(std::string path)
 {
 
 }
+
+std::vector<struct file_info> *DataBase::readdir(std::string dirname)
+{
+  std::vector<struct file_info> * res = new std::vector<struct file_info>();
+  sql::PreparedStmt *stmt = db.prepareStmt("SELECT _ID, path, size, mode, uid, gid, mtime, ctime FROM files WHERE path LIKE '?'");
+  stmt->bindString(1, dirname+'\%');
+  while (stmt->next()) {
+    struct file_info fi;
+    fi.inode = stmt->getInt(0);
+    fi.name = stmt->getString(1).erase(0, dirname.length()+1);
+    fi.size = stmt->getInt64(2);
+    res->push_back(fi);
+  }
+  delete stmt;
+}
+
 

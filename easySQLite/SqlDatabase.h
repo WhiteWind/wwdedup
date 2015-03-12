@@ -8,6 +8,7 @@
 
 #include "sqlite3.h"
 #include "SqlCommon.h"
+#include "SqlPreparedStmt.h"
 
 
 namespace sql
@@ -30,6 +31,8 @@ public:
 	bool open(string filename);
 	void close();
 	bool isOpen();
+
+        PreparedStmt* prepareStmt(const string sql);
 
 public:
 	bool transactionBegin();

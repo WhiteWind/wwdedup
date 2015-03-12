@@ -1,8 +1,6 @@
 #include "SqlCommon.h"
 #include "SHA1.h"
 
-#include <stdlib.h>
-
 namespace sql
 {
 time::time()

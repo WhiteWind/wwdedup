@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
+#include <stdexcept>
 
 
 namespace sql

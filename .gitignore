@@ -1,1 +1,8 @@
 fuse-dedup-build/
+fuse-dedup-debug/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+*.user

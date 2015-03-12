@@ -65,6 +65,11 @@ bool Database::open(string filename)
 	return false;
 }
 
+PreparedStmt* Database::prepareStmt(const string sql)
+{
+        return new PreparedStmt(_db, sql);
+}
+
 bool Database::transactionBegin()
 {
 	RecordSet rs(_db);

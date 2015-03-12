@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 2.8)
 add_definitions("-D_FILE_OFFSET_BITS=64")
 add_definitions("-DFUSE_USE_VERSION=26")
 
+
 aux_source_directory(. SRC_LIST)
 aux_source_directory(easySQLite SRC_LIST)
 

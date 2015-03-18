@@ -11,16 +11,15 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <string>
+#include <libgen.h>
+#include <errno.h>
+#include <time.h>
+#include <cstring>
 
 struct file_info {
   std::string name;
-  ino_t inode;
-  mode_t mode;
-  uid_t uid;
-  gid_t gid;
-  off_t size;
-  unsigned int mtime;
-  unsigned int ctime;
+  int depth;
+  struct stat st;
 };
 
 class DataBase
@@ -32,10 +31,10 @@ public:
     ~DataBase();
     void test();
 
-    int fstat(std::string path, struct stat* statbuf);
+    file_info getByPath(const std::string path);
     int create(std::string path, mode_t mode);
     int unlink(std::string path);
-    std::vector<struct file_info> *readdir(std::string dirname);
+    std::vector<struct file_info> *readdir(file_info *directory);
 };
 
 #endif // DATABASE_H

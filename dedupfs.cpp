@@ -4,11 +4,6 @@ DedupFS* DedupFS::_instance = NULL;
 
 #define RETURN_ERRNO(x) (x) == 0 ? 0 : -errno
 
-const char* basename_(const char* str) {
-  const char * res = strrchr(str, '/');
-  return res ? res + 1 : str;
-}
-
 DedupFS* DedupFS::Instance() {
 	if(_instance == NULL) {
                 _instance = new DedupFS();
@@ -30,21 +25,9 @@ void DedupFS::SetDataBase(void *_db)
 }
 
 int DedupFS::Getattr(const char *path, struct stat *statbuf) {
-//	char fullPath[PATH_MAX];
-//	AbsPath(fullPath, path);
-        //printf("getattr(%s)\n", path);
-//	return RETURN_ERRNO(lstat(fullPath, statbuf));
   file_info fi = db->getByPath(path);
   if (fi.st.st_ino) {
     *statbuf = fi.st;
-//    statbuf->st_mode = fi.mode;
-//    statbuf->st_nlink = 1;
-//    statbuf->st_size = fi.size;
-//    statbuf->st_uid = fi.uid;
-//    statbuf->st_gid = fi.gid;
-//    statbuf->st_ctime = fi.ctime;
-//    statbuf->st_mtime = fi.mtime;
-//    statbuf->st_atime = fi.mtime;
     printf("getattr: SUCCESS %s %d %o\n", path, (int)fi.st.st_ino, (int)fi.st.st_mode);
     return 0;
   } else {
@@ -72,18 +55,12 @@ int DedupFS::Mknod(const char *path, mode_t mode, dev_t dev) {
 }
 
 int DedupFS::Mkdir(const char *path, mode_t mode) {
-        printf("**mkdir(path=%s, mode=%d)\n", path, (int)mode);
-//	char fullPath[PATH_MAX];
-//	AbsPath(fullPath, path);
-//	return RETURN_ERRNO(mkdir(fullPath, mode));
+  printf("**mkdir(path=%s, mode=%d)\n", path, (int)mode);
   return db->create(path, mode | S_IFDIR);
 }
 
 int DedupFS::Unlink(const char *path) {
-        printf("unlink(path=%s\n)", path);
-//	char fullPath[PATH_MAX];
-//	AbsPath(fullPath, path);
-//	return RETURN_ERRNO(unlink(fullPath));
+  printf("unlink(path=%s\n)", path);
   file_info fi = db->getByPath(path);
   if (!fi.st.st_ino)
     return -ENOENT;
@@ -93,10 +70,8 @@ int DedupFS::Unlink(const char *path) {
 }
 
 int DedupFS::Rmdir(const char *path) {
-        printf("rmkdir(path=%s\n)", path);
-//	char fullPath[PATH_MAX];
-//	AbsPath(fullPath, path);
-//	return RETURN_ERRNO(rmdir(fullPath));
+  printf("rmkdir(path=%s\n)", path);
+
   file_info fi = db->getByPath(path);
   if (!S_ISDIR(fi.st.st_mode))
     return -ENOTDIR;
@@ -114,12 +89,8 @@ int DedupFS::Symlink(const char *path, const char *link) {
 }
 
 int DedupFS::Rename(const char *path, const char *newpath) {
-        printf("rename(path=%s, newPath=%s)\n", path, newpath);
-//	char fullPath[PATH_MAX];
-//	AbsPath(fullPath, path);
-//	return RETURN_ERRNO(rename(fullPath, newpath));
+  printf("rename(path=%s, newPath=%s)\n", path, newpath);
   return db->rename(path, newpath);
-  //return -ENOSYS;
 }
 
 int DedupFS::Link(const char *path, const char *newpath) {
@@ -293,7 +264,7 @@ int DedupFS::Readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t 
   filler(buf, ".", &((file_info*)fileInfo->fh)->st, 0);
   filler(buf, "..", &((file_info*)fileInfo->fh)->st, 0);
   for (std::vector<file_info>::iterator file = files->begin(); file != files->end(); ++file) {
-    filler(buf, basename_(file->name.c_str()), &(file->st), 0);
+    filler(buf, file->name.branch_path().c_str(), &(file->st), 0);
   }
   delete files;
   return 0;

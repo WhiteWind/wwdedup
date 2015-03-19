@@ -9,15 +9,17 @@
 
 #include <dirent.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <string>
 #include <libgen.h>
 #include <errno.h>
 #include <time.h>
 #include <cstring>
+#include <boost/filesystem/path.hpp>
 
 struct file_info {
-  std::string name;
+  boost::filesystem::path name;
   int depth;
   struct stat st;
 };
@@ -31,9 +33,11 @@ public:
     ~DataBase();
     void test();
 
-    file_info getByPath(const std::string path);
-    int create(std::string path, mode_t mode);
-    int unlink(std::string path);
+    file_info getByPath(const boost::filesystem::path filename);
+    int rename(const boost::filesystem::path oldPath, const boost::filesystem::path newPath);
+    int create(boost::filesystem::path path, mode_t mode);
+    int remove(boost::filesystem::path filename);
+    bool dirEmpty(file_info dir);
     std::vector<struct file_info> *readdir(file_info *directory);
 };
 

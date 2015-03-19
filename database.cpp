@@ -1,6 +1,7 @@
 #include "database.h"
 
 using namespace sql;
+using namespace boost::filesystem;
 
 Field definition_blockHashes[] =
 {
@@ -30,6 +31,7 @@ Field definition_files[] =
     Field("gid", type_int, flag_not_null),
     Field("mtime", type_int, flag_not_null),
     Field("ctime", type_int, flag_not_null),
+    Field("link_target", type_text),
     Field(DEFINITION_END),
 };
 
@@ -103,14 +105,14 @@ DataBase::~DataBase()
   db.close();
 }
 
-file_info DataBase::getByPath(const std::string path)
+file_info DataBase::getByPath(const path filename)
 {
   file_info res;
   res.st.st_ino = 0;
   sql::PreparedStmt *stmt = db.prepareStmt("SELECT _ID, depth, size, mode, uid, gid, mtime, ctime, path FROM files WHERE path = ?");
-  stmt->bindString(1, path);
+  stmt->bindString(1, filename.string());
   if (stmt->next()) {
-    res.name = path;
+    res.name = filename;
     res.st.st_ino = stmt->getInt64(0);
     res.depth = stmt->getInt(1);
     res.st.st_size = stmt->getInt64(2);
@@ -128,28 +130,79 @@ file_info DataBase::getByPath(const std::string path)
   return res;
 }
 
-int DataBase::create(std::string path, mode_t mode)
+int DataBase::rename(const path oldPath, const path newPath)
+{
+  file_info oldFile = getByPath(oldPath);
+  if (!oldFile.st.st_ino)
+    return -ENOENT;
+  file_info destDir = getByPath(newPath.branch_path());
+  if (!destDir.st.st_ino)
+    return -ENOENT;
+  if (!S_ISDIR(destDir.st.st_mode))
+    return -ENOTDIR;
+  int depthDiff = destDir.depth + 1 - oldFile.depth;
+  file_info newFile = getByPath(newPath);
+  if (newFile.st.st_ino) { // DST exists
+    if (S_ISDIR(oldFile.st.st_mode)) { // SRC is a directory
+      if (S_ISDIR(newFile.st.st_mode) && !dirEmpty(newFile))
+        return -ENOTEMPTY;  // DST is non-empty directory
+      if (!S_ISDIR(newFile.st.st_mode))
+        return -ENOTDIR; // DST is not a directory
+      if (newPath.string().find(oldPath.string()) == 0)
+        return -EINVAL; // DST is a subdir of SRC
+    } else { // SRC is file
+      if (S_ISDIR(newFile.st.st_mode))
+        return -EISDIR; // DST is a directory
+    }
+    if (remove(newPath)) {
+      return -EBUSY;
+    }
+  }
+  if (S_ISDIR(oldFile.st.st_mode)) {
+    PreparedStmt *stmt = db.prepareStmt("SELECT _ID, path, depth FROM files WHERE path LIKE ?");
+    stmt->bindString(1, oldPath.string() + "/%");
+    while (stmt->next()) {
+      sqlite3_uint64 id = stmt->getInt64(0);
+      string fil = stmt->getString(1);
+      fil.replace(0, oldPath.string().length(), newPath.string());
+      PreparedStmt * upd = db.prepareStmt("UPDATE files SET path = ?, depth = depth + ? WHERE _ID = ?");
+      upd->bindString(1, fil);
+      upd->bindInt(2, depthDiff);
+      upd->bindInt64(3, id);
+      upd->next();
+      delete upd;
+    }
+    delete stmt;
+  }
+  PreparedStmt *stmt = db.prepareStmt("UPDATE files SET path = ?, depth = ? WHERE _ID = ?");
+  stmt->bindString(1, newPath.string());
+  stmt->bindInt(2, destDir.depth + 1);
+  stmt->bindInt64(3, oldFile.st.st_ino);
+  stmt->next();
+  delete stmt;
+  return 0;
+}
+
+int DataBase::create(path filename, mode_t mode)
 {
   try {
     int depth = 0;
-    if (path != "/") {
-      char * path_c = strdup(path.c_str());
-      file_info dir = getByPath(dirname(path_c));
-      free(path_c);
+    if (filename != "/") {
+      file_info dir = getByPath(filename.branch_path());
       if (!dir.st.st_ino)
         return -ENOENT;
       if ((dir.st.st_mode & S_IFMT) != S_IFDIR)
         return -ENOTDIR;
       depth = dir.depth + 1;
     }
-    file_info fi = getByPath(path);
+    file_info fi = getByPath(filename);
     if (fi.st.st_ino)
       return -EEXIST;
     time_t t = ::time(NULL);
-    printf("Creating file %s with mode %o\n", path.c_str(), (int)mode);
+    printf("Creating file %s with mode %o\n", filename.c_str(), (int)mode);
     sql::PreparedStmt *stmt = db.prepareStmt("INSERT INTO files (path, depth, size, mode, uid, gid, mtime, ctime) VALUES \
         (?, ?, ?, ?, ?, ?, ?, ?)");
-    stmt->bindString(1, path.c_str());
+    stmt->bindString(1, filename.c_str());
     stmt->bindInt(2, depth);
     stmt->bindInt(3, 0);
     stmt->bindInt(4, mode);
@@ -165,9 +218,27 @@ int DataBase::create(std::string path, mode_t mode)
   }
 }
 
-int DataBase::unlink(std::string path)
+int DataBase::remove(path filename)
 {
+  PreparedStmt *stmt = db.prepareStmt("DELETE FROM files WHERE path = ?");
+  stmt->bindString(1, filename.string());
+  stmt->next();
+  delete stmt;
+  return 0;
+}
 
+bool DataBase::dirEmpty(file_info dir)
+{
+  PreparedStmt *stmt = db.prepareStmt("SELECT COUNT(*) FROM files WHERE path LIKE ? AND depth = ?");
+  if (*dir.name.string().rbegin() == '/')
+    stmt->bindString(1, dir.name.string()+"%");
+  else
+    stmt->bindString(1, dir.name.string()+"/%");
+  stmt->bindInt(2, dir.depth + 1);
+  stmt->next();
+  int cnt = stmt->getInt(0);
+  delete stmt;
+  return !cnt;
 }
 
 std::vector<struct file_info> *DataBase::readdir(file_info *directory)
@@ -175,7 +246,10 @@ std::vector<struct file_info> *DataBase::readdir(file_info *directory)
   std::vector<struct file_info> * res = new std::vector<struct file_info>();
   sql::PreparedStmt *stmt = db.prepareStmt(
         "SELECT _ID, path, size, mode, uid, gid, mtime, ctime FROM files WHERE path LIKE ? AND depth = ?");
-  stmt->bindString(1, directory->name+'\%');
+  if (*directory->name.string().rbegin() == '/')
+    stmt->bindString(1, directory->name.string()+"%");
+  else
+    stmt->bindString(1, directory->name.string()+"/%");
   stmt->bindInt(2, directory->depth + 1);
   while (stmt->next()) {
     struct file_info fi;

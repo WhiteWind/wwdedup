@@ -80,10 +80,16 @@ int DedupFS::Mkdir(const char *path, mode_t mode) {
 }
 
 int DedupFS::Unlink(const char *path) {
-//	printf("unlink(path=%s\n)", path);
+        printf("unlink(path=%s\n)", path);
 //	char fullPath[PATH_MAX];
 //	AbsPath(fullPath, path);
 //	return RETURN_ERRNO(unlink(fullPath));
+  file_info fi = db->getByPath(path);
+  if (!fi.st.st_ino)
+    return -ENOENT;
+  if (S_ISDIR(fi.st.st_mode))
+    return -EISDIR;
+  return db->remove(path);
 }
 
 int DedupFS::Rmdir(const char *path) {
@@ -91,7 +97,12 @@ int DedupFS::Rmdir(const char *path) {
 //	char fullPath[PATH_MAX];
 //	AbsPath(fullPath, path);
 //	return RETURN_ERRNO(rmdir(fullPath));
-  return -ENOSYS;
+  file_info fi = db->getByPath(path);
+  if (!S_ISDIR(fi.st.st_mode))
+    return -ENOTDIR;
+  if (!db->dirEmpty(fi))
+    return -ENOTEMPTY;
+  return db->remove(path);
 }
 
 int DedupFS::Symlink(const char *path, const char *link) {
@@ -107,7 +118,8 @@ int DedupFS::Rename(const char *path, const char *newpath) {
 //	char fullPath[PATH_MAX];
 //	AbsPath(fullPath, path);
 //	return RETURN_ERRNO(rename(fullPath, newpath));
-  return -ENOSYS;
+  return db->rename(path, newpath);
+  //return -ENOSYS;
 }
 
 int DedupFS::Link(const char *path, const char *newpath) {

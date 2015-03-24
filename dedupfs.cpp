@@ -137,19 +137,13 @@ int DedupFS::Chown(const char *path, uid_t uid, gid_t gid) {
 }
 
 int DedupFS::Truncate(const char *path, off_t newSize) {
-        printf("truncate(path=%s, newSize=%d\n", path, (int)newSize);
-//	char fullPath[PATH_MAX];
-//	AbsPath(fullPath, path);
-//	return RETURN_ERRNO(truncate(fullPath, newSize));
-  return -ENOSYS;
+  printf("truncate(path=%s, newSize=%d\n", path, (int)newSize);
+  return db->truncate(path, newSize);
 }
 
 int DedupFS::Utime(const char *path, struct utimbuf *ubuf) {
         printf("utime(path=%s)\n", path);
-//	char fullPath[PATH_MAX];
-//	AbsPath(fullPath, path);
-//	return RETURN_ERRNO(utime(fullPath, ubuf));
-  return -ENOSYS;
+  return db->utime(path, ubuf);
 }
 
 int DedupFS::Open(const char *path, struct fuse_file_info *fileInfo) {
@@ -264,24 +258,25 @@ int DedupFS::Opendir(const char *path, struct fuse_file_info *fileInfo) {
 }
 
 int DedupFS::Readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fileInfo) {
-        printf("readdir(path=%s, offset=%d)\n", path, (int)offset);
-//	DIR *dir = (DIR*)fileInfo->fh;
-//	struct dirent *de = readdir(dir);
-//	if(NULL == de) {
-//		return -errno;
-//	} else {
-//		do {
-//			if(filler(buf, de->d_name, NULL, 0) != 0) {
-//				return -ENOMEM;
-//			}
-//		} while(NULL != (de = readdir(dir)));
-//	}
-//	return 0;
-  std::vector<file_info> * files = db->readdir((file_info*)fileInfo->fh);
-  filler(buf, ".", &((file_info*)fileInfo->fh)->st, 0);
-  filler(buf, "..", &((file_info*)fileInfo->fh)->st, 0);
-  for (std::vector<file_info>::iterator file = files->begin(); file != files->end(); ++file) {
-    filler(buf, file->name.branch_path().c_str(), &(file->st), 0);
+  printf("readdir(path=%s, offset=%d)\n", path, (int)offset);
+  std::vector<file_info> * files = NULL;
+  try {
+    files = db->readdir((file_info*)fileInfo->fh);
+  } catch (std::exception e) {
+    printf("Exception in db.readdir: %s", e.what());
+    return -EIO;
+  }
+  try {
+    filler(buf, ".", &((file_info*)fileInfo->fh)->st, 0);
+    filler(buf, "..", &((file_info*)fileInfo->fh)->st, 0);
+    for (std::vector<file_info>::iterator file = files->begin(); file != files->end(); ++file) {
+      if (filler(buf, file->name.leaf().c_str(), &(file->st), 0))
+        break;
+    }
+  } catch (std::exception e) {
+    printf("Exception in readdir: %s", e.what());
+    delete files;
+    return -EIO;
   }
   delete files;
   return 0;

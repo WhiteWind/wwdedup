@@ -244,6 +244,25 @@ int DataBase::remove(path filename)
   return 0;
 }
 
+int DataBase::truncate(path filename, off_t newSize)
+{
+  PreparedStmt *stmt = db.prepareStmt("UPDATE files SET size = ? WHERE path = ?");
+  stmt->bindInt64(1, newSize);
+  stmt->bindString(2, filename.string());
+  stmt->next();
+  delete stmt;
+}
+
+int DataBase::utime(const path filename, struct utimbuf *ubuf)
+{
+  PreparedStmt *stmt = db.prepareStmt("UPDATE files SET mtime = ? WHERE path = ?");
+  stmt->bindInt(1, ubuf->modtime);
+  stmt->bindString(2, filename.string());
+  stmt->next();
+  delete stmt;
+  return 0;
+}
+
 bool DataBase::dirEmpty(file_info dir)
 {
   PreparedStmt *stmt = db.prepareStmt("SELECT COUNT(*) FROM files WHERE path LIKE ? AND depth = ?");
@@ -269,7 +288,7 @@ std::vector<struct file_info> *DataBase::readdir(file_info *directory)
     stmt->bindString(1, directory->name.string()+"/%");
   stmt->bindInt(2, directory->depth + 1);
   while (stmt->next()) {
-    struct file_info fi;
+    struct file_info fi;    
     fi.st.st_ino = stmt->getInt64(0);
     fi.name = stmt->getString(1);
     fi.depth = directory->depth + 1;
@@ -279,6 +298,7 @@ std::vector<struct file_info> *DataBase::readdir(file_info *directory)
     fi.st.st_gid = stmt->getInt(5);
     fi.st.st_mtime = stmt->getInt(6);
     fi.st.st_ctime = stmt->getInt(7);
+    //printf("Got record: %s, %d, %d, %d %o\n", fi.name.c_str(), (int)fi.st.st_ino, fi.depth, (int)fi.st.st_size, (int)fi.st.st_mode);
     res->push_back(fi);
   }
   delete stmt;

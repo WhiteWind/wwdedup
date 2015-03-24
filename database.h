@@ -34,6 +34,7 @@
 #include <time.h>
 #include <cstring>
 #include <boost/filesystem/path.hpp>
+#include <utime.h>
 
 struct file_info {
   boost::filesystem::path name;
@@ -54,6 +55,8 @@ public:
     int rename(const boost::filesystem::path oldPath, const boost::filesystem::path newPath);
     int create(boost::filesystem::path path, mode_t mode);
     int remove(boost::filesystem::path filename);
+    int truncate(boost::filesystem::path filename, off_t newSize);
+    int utime(const boost::filesystem::path filename, struct utimbuf *ubuf);
     bool dirEmpty(file_info dir);
     std::vector<struct file_info> *readdir(file_info *directory);
 };

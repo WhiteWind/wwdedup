@@ -202,7 +202,6 @@ int DataBase::rename(const path oldPath, const path newPath)
 
 int DataBase::create(path filename, mode_t mode)
 {
-  try {
     int depth = 0;
     if (filename != "/") {
       file_info dir = getByPath(filename.branch_path());
@@ -229,10 +228,6 @@ int DataBase::create(path filename, mode_t mode)
     stmt->bindInt(8, t);
     stmt->next();
     return 0;
-  } catch(Exception e) {
-    printf("Exception %s\n", e.msg().c_str());
-    return -EIO;
-  }
 }
 
 int DataBase::remove(path filename)

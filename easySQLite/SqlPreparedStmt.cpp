@@ -26,7 +26,12 @@ PreparedStmt::PreparedStmt(sqlite3 *db, std::string sql)
 {
     int err = sqlite3_prepare_v2(db, sql.c_str(), sql.length() + 1, &_stmt, NULL);
     if (err != SQLITE_OK)
-        THROW_EXCEPTION("SqlPreparedStmt::SqlPreparedStmt: error creating prepared statement: " + sql)
+        THROW_EXCEPTION("Error creating prepared statement: " + getError())
+}
+
+string PreparedStmt::getError()
+{
+  return string(sqlite3_errmsg(_db));
 }
 
 PreparedStmt::~PreparedStmt()
@@ -53,7 +58,7 @@ bool PreparedStmt::next()
         return false;
     }
 
-    THROW_EXCEPTION("SqlPreparedStmt::execute: error fetching result")
+    THROW_EXCEPTION("Error executing prepared statement: " + getError())
 }
 
 void PreparedStmt::checkColumn(int index)

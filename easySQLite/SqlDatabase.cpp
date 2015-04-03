@@ -28,7 +28,7 @@ sqlite3* Database::getHandle()
 
 string Database::errMsg()
 {
-	return _err_msg;
+  return _err_msg;
 }
 
 void Database::close()
@@ -51,7 +51,7 @@ bool Database::open(string filename)
 {
   close();
 
-  sqlite3_enable_shared_cache(true);
+  sqlite3_enable_shared_cache(false);
   _result_open = sqlite3_open(filename.c_str(), &_db);
 
   if (isOpen())

@@ -31,6 +31,7 @@ namespace sql
         sqlite3_stmt* _stmt;
         int _columnCount;
         void checkColumn(int index);
+        string getError();
     public:
         PreparedStmt(sqlite3* db, std::string sql);
         ~PreparedStmt();

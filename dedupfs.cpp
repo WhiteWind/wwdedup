@@ -18,7 +18,10 @@
 #include <boost/thread/tss.hpp>
 #include "dedupfs.h"
 
+#define REPORT_EXCEPTION(e) printf("Exception %s: %s\n\tin: %s\n", typeid(e).name(), e.what(), __PRETTY_FUNCTION__);
+
 static boost::thread_specific_ptr<DedupFS> _instance;
+static unsigned th_count = 0;
 
 #define RETURN_ERRNO(x) (x) == 0 ? 0 : -errno
 
@@ -26,30 +29,35 @@ DedupFS* DedupFS::Instance() {
   if(!_instance.get()) {
     _instance.reset(new DedupFS());
   }
-  printf("%d: ", pthread_self());
+  printf("%X: ", pthread_self());
   return _instance.get();
 }
 
 DedupFS::DedupFS() {
-  printf("%d: DedupFS::DedupFS()\n", pthread_self());
-  //void *user_data = fuse_get_context()->private_data;
+  printf("%X/%d: DedupFS::DedupFS()\n", pthread_self(), __sync_add_and_fetch(&th_count, 1));
+  //void *user_data = fuse_get_context()->private_data;  
   db = new DataBase(static_cast<std::string*>(fuse_get_context()->private_data));
 }
 
 DedupFS::~DedupFS() {
-  printf("%d: DedupFS::~DedupFS()\n", pthread_self());
+  printf("%X/%d: DedupFS::~DedupFS()\n", pthread_self(), __sync_sub_and_fetch(&th_count, 1));
   delete db;
 }
 
 int DedupFS::Getattr(const char *path, struct stat *statbuf) {
-  file_info fi = db->getByPath(path);
-  if (fi.st.st_ino) {
-    *statbuf = fi.st;
-    printf("getattr: SUCCESS %s %d %o\n", path, (int)fi.st.st_ino, (int)fi.st.st_mode);
-    return 0;
-  } else {
-    printf("getattr: ENOENT %s\n", path);
-    return -ENOENT;
+  try {
+    file_info fi = db->getByPath(path);
+    if (fi.st.st_ino) {
+      *statbuf = fi.st;
+      printf("getattr: SUCCESS %s %d %o\n", path, (int)fi.st.st_ino, (int)fi.st.st_mode);
+      return 0;
+    } else {
+      printf("getattr: ENOENT %s\n", path);
+      return -ENOENT;
+    }
+  } catch (std::exception &e) {
+    REPORT_EXCEPTION(e)
+    return -EIO;
   }
 }
 
@@ -73,28 +81,42 @@ int DedupFS::Mknod(const char *path, mode_t mode, dev_t dev) {
 
 int DedupFS::Mkdir(const char *path, mode_t mode) {
   printf("**mkdir(path=%s, mode=%d)\n", path, (int)mode);
-  return db->create(path, mode | S_IFDIR);
+  try {
+    return db->create(path, mode | S_IFDIR);
+  } catch (std::exception &e) {
+    REPORT_EXCEPTION(e)
+    return -EIO;
+  }
 }
 
 int DedupFS::Unlink(const char *path) {
   printf("unlink(path=%s\n)", path);
-  file_info fi = db->getByPath(path);
-  if (!fi.st.st_ino)
-    return -ENOENT;
-  if (S_ISDIR(fi.st.st_mode))
-    return -EISDIR;
-  return db->remove(path);
+  try {
+    file_info fi = db->getByPath(path);
+    if (!fi.st.st_ino)
+      return -ENOENT;
+    if (S_ISDIR(fi.st.st_mode))
+      return -EISDIR;
+    return db->remove(path);
+  } catch (std::exception &e) {
+    REPORT_EXCEPTION(e)
+    return -EIO;
+  }
 }
 
 int DedupFS::Rmdir(const char *path) {
   printf("rmkdir(path=%s\n)", path);
-
-  file_info fi = db->getByPath(path);
-  if (!S_ISDIR(fi.st.st_mode))
-    return -ENOTDIR;
-  if (!db->dirEmpty(fi))
-    return -ENOTEMPTY;
-  return db->remove(path);
+  try {
+    file_info fi = db->getByPath(path);
+    if (!S_ISDIR(fi.st.st_mode))
+      return -ENOTDIR;
+    if (!db->dirEmpty(fi))
+      return -ENOTEMPTY;
+    return db->remove(path);
+  } catch (std::exception &e) {
+    REPORT_EXCEPTION(e)
+    return -EIO;
+  }
 }
 
 int DedupFS::Symlink(const char *path, const char *link) {
@@ -107,7 +129,12 @@ int DedupFS::Symlink(const char *path, const char *link) {
 
 int DedupFS::Rename(const char *path, const char *newpath) {
   printf("rename(path=%s, newPath=%s)\n", path, newpath);
-  return db->rename(path, newpath);
+  try {
+    return db->rename(path, newpath);
+  } catch (std::exception &e) {
+    REPORT_EXCEPTION(e)
+    return -EIO;
+  }
 }
 
 int DedupFS::Link(const char *path, const char *newpath) {
@@ -138,16 +165,21 @@ int DedupFS::Chown(const char *path, uid_t uid, gid_t gid) {
 
 int DedupFS::Truncate(const char *path, off_t newSize) {
   printf("truncate(path=%s, newSize=%d\n", path, (int)newSize);
-  return db->truncate(path, newSize);
+  try {
+    return db->truncate(path, newSize);
+  } catch (std::exception &e) {
+    REPORT_EXCEPTION(e)
+    return -EIO;
+  }
 }
 
 int DedupFS::Utime(const char *path, struct utimbuf *ubuf) {
-        printf("utime(path=%s)\n", path);
+  printf("utime(path=%s)\n", path);
   return db->utime(path, ubuf);
 }
 
 int DedupFS::Open(const char *path, struct fuse_file_info *fileInfo) {
-        printf("open(path=%s)\n", path);
+  printf("open(path=%s)\n", path);
 //	char fullPath[PATH_MAX];
 //	AbsPath(fullPath, path);
 //	fileInfo->fh = open(fullPath, fileInfo->flags);
@@ -158,7 +190,12 @@ int DedupFS::Open(const char *path, struct fuse_file_info *fileInfo) {
 int DedupFS::Create(const char *path, mode_t mode, struct fuse_file_info *fileInfo)
 {
   printf("create(path=%s, mode=%o)\n", path, (int)mode);
-  return db->create(path, mode);
+  try {
+    return db->create(path, mode);
+  } catch (std::exception &e) {
+    REPORT_EXCEPTION(e)
+    return -EIO;
+  }
 }
 
 int DedupFS::Read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
@@ -182,14 +219,14 @@ int DedupFS::Statfs(const char *path, struct statvfs *statInfo) {
 }
 
 int DedupFS::Flush(const char *path, struct fuse_file_info *fileInfo) {
-        printf("flush(path=%s)\n", path);
+  printf("flush(path=%s)\n", path);
 //	//noop because we don't maintain our own buffers
-        return 0;
+  return 0;
 }
 
 int DedupFS::Release(const char *path, struct fuse_file_info *fileInfo) {
-        printf("release(path=%s)\n", path);
-        return 0;
+  printf("release(path=%s)\n", path);
+  return 0;
 }
 
 int DedupFS::Fsync(const char *path, int datasync, struct fuse_file_info *fi) {
@@ -234,26 +271,26 @@ int DedupFS::Removexattr(const char *path, const char *name) {
 }
 
 int DedupFS::Opendir(const char *path, struct fuse_file_info *fileInfo) {
-        printf("opendir(path=%s)\n", path);
-//	char fullPath[PATH_MAX];
-//	AbsPath(fullPath, path);
-//	DIR *dir = opendir(fullPath);
-//	fileInfo->fh = (uint64_t)dir;
-//	return NULL == dir ? -errno : 0;
-  file_info *fi = new file_info(db->getByPath(path));
-  if (fi->st.st_ino) {
-    if (!S_ISDIR(fi->st.st_mode)) {
+  printf("opendir(path=%s)", path);
+  try {
+    file_info *fi = new file_info(db->getByPath(path));
+    if (fi->st.st_ino) {
+      if (!S_ISDIR(fi->st.st_mode)) {
+        delete fi;
+        printf(": ENOTDIR %o\n", (int)fi->st.st_mode);
+        return -ENOTDIR;
+      }
+      fileInfo->fh = (uint64_t)fi;
+      printf(": SUCCESS\n");
+      return 0;
+    } else {
       delete fi;
-      printf("opendir: ENOTDIR %o\n", (int)fi->st.st_mode);
-      return -ENOTDIR;
+      printf(": ENOENT\n");
+      return -ENOENT;
     }
-    fileInfo->fh = (uint64_t)fi;
-    printf(": SUCCESS\n");
-    return 0;
-  } else {
-    delete fi;
-    printf(": ENOENT\n");
-    return -ENOENT;
+  } catch (std::exception &e) {
+    REPORT_EXCEPTION(e)
+    return -EIO;
   }
 }
 
@@ -262,8 +299,8 @@ int DedupFS::Readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t 
   std::vector<file_info> * files = NULL;
   try {
     files = db->readdir((file_info*)fileInfo->fh);
-  } catch (std::exception e) {
-    printf("Exception in db.readdir: %s", e.what());
+  } catch (std::exception &e) {
+    REPORT_EXCEPTION(e)
     return -EIO;
   }
   try {
@@ -273,8 +310,8 @@ int DedupFS::Readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t 
       if (filler(buf, file->name.leaf().c_str(), &(file->st), 0))
         break;
     }
-  } catch (std::exception e) {
-    printf("Exception in readdir: %s", e.what());
+  } catch (std::exception &e) {
+    REPORT_EXCEPTION(e)
     delete files;
     return -EIO;
   }
@@ -283,8 +320,7 @@ int DedupFS::Readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t 
 }
 
 int DedupFS::Releasedir(const char *path, struct fuse_file_info *fileInfo) {
-        printf("releasedir(path=%s)\n", path);
-//	closedir((DIR*)fileInfo->fh);
+  printf("releasedir(path=%s)\n", path);
   delete (file_info*)fileInfo->fh;
   return 0;
 }

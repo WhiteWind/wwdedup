@@ -104,20 +104,22 @@ public:
 
 
 //common exception class
-class Exception
+class Exception: public std::exception
 {
 private:
 	string _msg;
 
 public:
-	Exception(string msg)
-		: _msg(msg)
-	{
-	};
-	string msg()
+        Exception(string msg) _GLIBCXX_USE_NOEXCEPT : _msg(msg) {}
+        virtual ~Exception() _GLIBCXX_USE_NOEXCEPT {}
+        const string msg() const _GLIBCXX_USE_NOEXCEPT
 	{
 		return _msg;
 	}
+        virtual const char *what() const _GLIBCXX_USE_NOEXCEPT
+        {
+          return _msg.c_str();
+        }
 };
 
 

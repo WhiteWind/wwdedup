@@ -24,6 +24,11 @@
 
 struct fuse_operations examplefs_oper;
 
+void log_fun(void* priv, int errcode, const char* msg)
+{
+  printf("SQLITE Error %d: %s", errcode, msg);
+}
+
 int main(int argc, char *argv[]) {
   int i, fuse_stat;
 
@@ -72,6 +77,8 @@ int main(int argc, char *argv[]) {
   }
 
   std::string dbUrl = argv[i];
+  sqlite3_config(SQLITE_CONFIG_MULTITHREAD);
+  sqlite3_config(SQLITE_CONFIG_LOG, log_fun, NULL);
 
   try
   {

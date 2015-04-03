@@ -16,6 +16,12 @@
 
 namespace sql
 {
+enum transaction_mode {
+  tr_deferred,
+  tr_immediate,
+  tr_exclusive
+};
+
 //field state enums
 //--------------------------
 

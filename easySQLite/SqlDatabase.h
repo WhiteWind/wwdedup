@@ -35,7 +35,7 @@ public:
         PreparedStmt* prepareStmt(const string sql);
 
 public:
-	bool transactionBegin();
+  bool transactionBegin(transaction_mode _mode = tr_deferred);
 	bool transactionCommit();
 	bool transactionRollback();
 

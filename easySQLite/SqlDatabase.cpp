@@ -49,20 +49,23 @@ bool Database::isOpen()
 
 bool Database::open(string filename)
 {
-	close();
+  close();
 
-	_result_open = sqlite3_open(filename.c_str(), &_db);
+  sqlite3_enable_shared_cache(true);
+  _result_open = sqlite3_open(filename.c_str(), &_db);
 
-	if (isOpen())
-	{
-		return true;
-	} else {
-		_err_msg = sqlite3_errmsg(_db);
-	}
+  if (isOpen())
+  {
+    RecordSet rs(_db);
+    rs.query("PRAGMA journal_mode=WAL");
+    return true;
+  } else {
+    _err_msg = sqlite3_errmsg(_db);
+  }
 
-	THROW_EXCEPTION("Database::open: " + errMsg())
+  THROW_EXCEPTION("Database::open: " + errMsg())
 
-	return false;
+  return false;
 }
 
 PreparedStmt* Database::prepareStmt(const string sql)
@@ -70,11 +73,17 @@ PreparedStmt* Database::prepareStmt(const string sql)
         return new PreparedStmt(_db, sql);
 }
 
-bool Database::transactionBegin()
+bool Database::transactionBegin(transaction_mode _mode)
 {
 	RecordSet rs(_db);
 
-	if (rs.query("BEGIN TRANSACTION"))
+  string q = "BEGIN";
+  if (_mode == tr_immediate)
+    q += " IMMEDIATE";
+  if (_mode == tr_exclusive)
+    q += " EXCLUSIVE";
+  q += " TRANSACTION";
+  if (rs.query(q))
 		return true;
 
 	return false;

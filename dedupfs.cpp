@@ -15,30 +15,30 @@
  *   along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <boost/thread/tss.hpp>
 #include "dedupfs.h"
 
-DedupFS* DedupFS::_instance = NULL;
+static boost::thread_specific_ptr<DedupFS> _instance;
 
 #define RETURN_ERRNO(x) (x) == 0 ? 0 : -errno
 
 DedupFS* DedupFS::Instance() {
-	if(_instance == NULL) {
-                _instance = new DedupFS();
-	}
-	return _instance;
+  if(!_instance.get()) {
+    _instance.reset(new DedupFS());
+  }
+  printf("%d: ", pthread_self());
+  return _instance.get();
 }
 
 DedupFS::DedupFS() {
-
+  printf("%d: DedupFS::DedupFS()\n", pthread_self());
+  //void *user_data = fuse_get_context()->private_data;
+  db = new DataBase(static_cast<std::string*>(fuse_get_context()->private_data));
 }
 
 DedupFS::~DedupFS() {
-
-}
-
-void DedupFS::SetDataBase(void *_db)
-{
-  db = static_cast<DataBase*>(_db);
+  printf("%d: DedupFS::~DedupFS()\n", pthread_self());
+  delete db;
 }
 
 int DedupFS::Getattr(const char *path, struct stat *statbuf) {
@@ -151,8 +151,8 @@ int DedupFS::Open(const char *path, struct fuse_file_info *fileInfo) {
 //	char fullPath[PATH_MAX];
 //	AbsPath(fullPath, path);
 //	fileInfo->fh = open(fullPath, fileInfo->flags);
-//	return 0;
-  return -ENOSYS;
+    return 0;
+//  return -ENOSYS;
 }
 
 int DedupFS::Create(const char *path, mode_t mode, struct fuse_file_info *fileInfo)
@@ -294,7 +294,7 @@ int DedupFS::Fsyncdir(const char *path, int datasync, struct fuse_file_info *fil
 }
 
 void *DedupFS::Init(struct fuse_conn_info *conn) {
-	return 0;
+  return fuse_get_context()->private_data;
 }
 
 int DedupFS::Truncate(const char *path, off_t offset, struct fuse_file_info *fileInfo) {

@@ -47,7 +47,7 @@ class DataBase
 private:
     sql::Database db;
 public:
-    DataBase(const char* db_url);
+    DataBase(std::string* db_url);
     ~DataBase();
     void test();
 

@@ -52,9 +52,9 @@ Field definition_files[] =
     Field(DEFINITION_END),
 };
 
-DataBase::DataBase(const char *db_url)
+DataBase::DataBase(std::string *db_url)
 {
-    db.open(db_url);
+    db.open(*db_url);
     //define table object
     Table tbBlockHashes(db.getHandle(), "block_hashes", definition_blockHashes);
 
@@ -251,6 +251,7 @@ int DataBase::truncate(path filename, off_t newSize)
   stmt->bindString(2, filename.string());
   stmt->next();
   delete stmt;
+  return 0;
 }
 
 int DataBase::utime(const path filename, struct utimbuf *ubuf)

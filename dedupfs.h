@@ -31,13 +31,13 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/xattr.h>
+#include <pthread.h>
 #include "database.h"
 
 class DedupFS {
 private: 
 
   DataBase *db;
-  static DedupFS *_instance;
 
 public:
   static DedupFS *Instance();
@@ -45,7 +45,6 @@ public:
   DedupFS();
   ~DedupFS();
 
-  void SetDataBase(void *_db);
   int Getattr(const char *path, struct stat *statbuf);
   int Readlink(const char *path, char *link, size_t size);
   int Mknod(const char *path, mode_t mode, dev_t dev);

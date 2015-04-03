@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
   examplefs_oper.truncate = wrap_truncate;
   examplefs_oper.utime = wrap_utime;
   examplefs_oper.open = wrap_open;
-        examplefs_oper.create = wrap_create;
+  examplefs_oper.create = wrap_create;
   examplefs_oper.read = wrap_read;
   examplefs_oper.write = wrap_write;
   examplefs_oper.statfs = wrap_statfs;
@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
   examplefs_oper.fsyncdir = wrap_fsyncdir;
   examplefs_oper.init = wrap_init;
 
-  printf("mounting file system...\n");
+  printf("%d: mounting file system...\n", pthread_self());
 
   for(i = 1; i < argc && (argv[i][0] == '-'); i++) {
     if(i == argc) {
@@ -71,24 +71,26 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  std::string dbUrl = argv[i];
+
   try
   {
-    DataBase *db = new DataBase(argv[i]);
+    //DataBase *db = new DataBase(argv[i]);
     //db->test();
 
-    set_database(db);
+    //set_database(db);
 
     for(; i < argc; i++) {
       argv[i] = argv[i+1];
     }
     argc--;
 
-    fuse_stat = fuse_main(argc, argv, &examplefs_oper, NULL);
+    fuse_stat = fuse_main(argc, argv, &examplefs_oper, &dbUrl);
 
     printf("fuse_main returned %d\n", fuse_stat);
-    delete db;
+//    delete db;
   } catch (sql::Exception e) {
-          printf("ERROR: %s\r\n", e.msg().c_str());
+    printf("ERROR: %s\r\n", e.msg().c_str());
   }
 
   return fuse_stat;

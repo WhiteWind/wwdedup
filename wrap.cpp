@@ -19,10 +19,6 @@
 #include "wrap.h"
 #include "dedupfs.h"
 
-void set_database(void *_db) {
-        DedupFS::Instance()->SetDataBase(_db);
-}
-
 int wrap_getattr(const char *path, struct stat *statbuf) {
         return DedupFS::Instance()->Getattr(path, statbuf);
 }

@@ -32,6 +32,7 @@
 #include <sys/types.h>
 #include <sys/xattr.h>
 #include <pthread.h>
+#include <atomic>
 #include "database.h"
 
 class DedupFS {

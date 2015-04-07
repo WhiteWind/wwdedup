@@ -36,6 +36,8 @@
 #include <boost/filesystem/path.hpp>
 #include <utime.h>
 
+#define REPORT_EXCEPTION(e) printf("Exception %s: %s\n\tin: %s\n", typeid(e).name(), e.what(), __PRETTY_FUNCTION__);
+
 struct file_info {
   boost::filesystem::path name;
   int depth;

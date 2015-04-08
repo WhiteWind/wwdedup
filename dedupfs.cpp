@@ -27,17 +27,17 @@ DedupFS* DedupFS::Instance() {
   if(!_instance.get()) {
     _instance.reset(new DedupFS());
   }
-  printf("%X: ", pthread_self());
+  printf("%lX: ", pthread_self());
   return _instance.get();
 }
 
 DedupFS::DedupFS() {
-  printf("%X/%d: DedupFS::DedupFS()\n", pthread_self(), th_count++);
+  printf("%lX/%d: DedupFS::DedupFS()\n", pthread_self(), th_count++);
   db = new DataBase(static_cast<std::string*>(fuse_get_context()->private_data));
 }
 
 DedupFS::~DedupFS() {
-  printf("%X/%d: DedupFS::~DedupFS()\n", pthread_self(), th_count--);
+  printf("%lX/%d: DedupFS::~DedupFS()\n", pthread_self(), th_count--);
   delete db;
 }
 
@@ -209,6 +209,7 @@ int DedupFS::Setxattr(const char *path, const char *name, const char *value, siz
 //	char fullPath[PATH_MAX];
 //	AbsPath(fullPath, path);
 //	return RETURN_ERRNO(lsetxattr(fullPath, name, value, size, flags));
+  return -ENOSYS;
 }
 
 int DedupFS::Getxattr(const char *path, const char *name, char *value, size_t size) {
@@ -216,6 +217,7 @@ int DedupFS::Getxattr(const char *path, const char *name, char *value, size_t si
 //	char fullPath[PATH_MAX];
 //	AbsPath(fullPath, path);
 //	return RETURN_ERRNO(getxattr(fullPath, name, value, size));
+  return -ENOSYS;
 }
 
 int DedupFS::Listxattr(const char *path, char *list, size_t size) {
@@ -223,6 +225,7 @@ int DedupFS::Listxattr(const char *path, char *list, size_t size) {
 //	char fullPath[PATH_MAX];
 //	AbsPath(fullPath, path);
 //	return RETURN_ERRNO(llistxattr(fullPath, list, size));
+  return -ENOSYS;
 }
 
 int DedupFS::Removexattr(const char *path, const char *name) {
@@ -230,6 +233,7 @@ int DedupFS::Removexattr(const char *path, const char *name) {
 //	char fullPath[PATH_MAX];
 //	AbsPath(fullPath, path);
 //	return RETURN_ERRNO(lremovexattr(fullPath, name));
+  return -ENOSYS;
 }
 
 int DedupFS::Opendir(const char *path, struct fuse_file_info *fileInfo) {
@@ -290,6 +294,7 @@ int DedupFS::Truncate(const char *path, off_t offset, struct fuse_file_info *fil
 //	char fullPath[PATH_MAX];
 //	AbsPath(fullPath, path);
 //	return RETURN_ERRNO(ftruncate(fileInfo->fh, offset));
+  return -ENOSYS;
 }
 
 

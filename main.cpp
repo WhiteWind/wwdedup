@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
   examplefs_oper.fsyncdir = wrap_fsyncdir;
   examplefs_oper.init = wrap_init;
 
-  printf("%d: mounting file system...\n", pthread_self());
+  printf("%lX: mounting file system...\n", pthread_self());
 
   for(i = 1; i < argc && (argv[i][0] == '-'); i++) {
     if(i == argc) {

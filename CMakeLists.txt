@@ -11,7 +11,7 @@ aux_source_directory(. SRC_LIST)
 aux_source_directory(easySQLite SRC_LIST)
 
 add_executable(${PROJECT_NAME} ${SRC_LIST})
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -fno-strict-aliasing")
 
 target_link_libraries(fuse-dedup -lfuse -ldl -lpthread ${Boost_SYSTEM_LIBRARY} ${Boost_FILESYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY})
 include_directories(fuse-dedup PRIVATE easySQLite)

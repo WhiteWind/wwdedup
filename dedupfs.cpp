@@ -26,6 +26,8 @@ static std::atomic_uint th_count(0);
 DedupFS* DedupFS::Instance() {
   if(!_instance.get()) {
     _instance.reset(new DedupFS());
+    if ( !cds::threading::Manager::isThreadAttached() )
+      cds::threading::Manager::attachThread();
   }
   printf("%lX: ", pthread_self());
   return _instance.get();
@@ -77,7 +79,7 @@ int DedupFS::Mkdir(const char *path, mode_t mode) {
 }
 
 int DedupFS::Unlink(const char *path) {
-  printf("unlink(path=%s\n)", path);
+  printf("unlink(path=%s)\n", path);
   file_info fi = db->getByPath(path);
   if (!fi.st.st_ino)
     return -ENOENT;

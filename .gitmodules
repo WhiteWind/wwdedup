@@ -1,0 +1,3 @@
+[submodule "libcds"]
+	path = libcds
+	url = git@github.com:khizmax/libcds.git

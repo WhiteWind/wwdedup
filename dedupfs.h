@@ -33,6 +33,8 @@
 #include <sys/xattr.h>
 #include <pthread.h>
 #include <atomic>
+#include <cds/gc/dhp.h>
+#include <cds/container/skip_list_map_dhp.h>
 #include "database.h"
 
 class DedupFS {

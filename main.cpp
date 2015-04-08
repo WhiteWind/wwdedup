@@ -15,6 +15,8 @@
  *   along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <cds/init.h>       // for cds::Initialize and cds::Terminate
+#include <cds/gc/dhp.h>      // for cds::HP (Hazard Pointer) SMR
 #include "wrap.h"
 #include "SqlCommon.h"
 #include "database.h"
@@ -30,7 +32,12 @@ void log_fun(void* priv, int errcode, const char* msg)
 }
 
 int main(int argc, char *argv[]) {
-  int i, fuse_stat;
+  cds::Initialize();
+
+  if ( !cds::threading::Manager::isThreadAttached() )
+          cds::threading::Manager::attachThread();
+
+  int i, fuse_stat = 1;
 
   examplefs_oper.getattr = wrap_getattr;
   examplefs_oper.readlink = wrap_readlink;
@@ -102,6 +109,7 @@ int main(int argc, char *argv[]) {
     printf("ERROR: %s\r\n", e.msg().c_str());
   }
 
+  cds::Terminate();
   return fuse_stat;
 }
 

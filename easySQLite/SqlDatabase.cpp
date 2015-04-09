@@ -70,7 +70,12 @@ bool Database::open(string filename)
 
 PreparedStmt* Database::prepareStmt(const string sql)
 {
-        return new PreparedStmt(_db, sql);
+  return new PreparedStmt(_db, sql);
+}
+
+sqlite_int64 Database::lastInsertId()
+{
+  return sqlite3_last_insert_rowid(_db);
 }
 
 bool Database::transactionBegin(transaction_mode _mode)

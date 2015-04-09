@@ -152,6 +152,12 @@ int DedupFS::Open(const char *path, struct fuse_file_info *fileInfo) {
 //	char fullPath[PATH_MAX];
 //	AbsPath(fullPath, path);
 //	fileInfo->fh = open(fullPath, fileInfo->flags);
+  file_info fi = db->getByPath(path);
+  if (!fi.st.st_ino)
+    return -ENOENT;
+  if (!S_ISREG(fi.st.st_mode))
+    return -EIO;
+  fileInfo->fh = (uint64_t)new file_info(fi);
   return 0;
 //  return -ENOSYS;
 }
@@ -159,13 +165,19 @@ int DedupFS::Open(const char *path, struct fuse_file_info *fileInfo) {
 int DedupFS::Create(const char *path, mode_t mode, struct fuse_file_info *fileInfo)
 {
   printf("create(path=%s, mode=%o)\n", path, (int)mode);
-  return db->create(path, mode);
+  int res = db->create(path, mode);
+  if (res >= 0) {
+    file_info *fi = new file_info(db->getByPath(path));
+    fileInfo->fh = (uint64_t)fi;
+  } else
+    fileInfo->fh = 0;
+  return res;
 }
 
 int DedupFS::Read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
-        printf("read(path=%s, size=%d, offset=%d)\n", path, (int)size, (int)offset);
-//	return RETURN_ERRNO(pread(fileInfo->fh, buf, size, offset));
-  return -ENOSYS;
+  printf("read(path=%s, size=%d, offset=%d)\n", path, (int)size, (int)offset);
+  return BlocksCache::readBuf((file_info*)fileInfo->fh, buf, size, offset);
+  //return -ENOSYS;
 }
 
 int DedupFS::Write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
@@ -190,6 +202,7 @@ int DedupFS::Flush(const char *path, struct fuse_file_info *fileInfo) {
 
 int DedupFS::Release(const char *path, struct fuse_file_info *fileInfo) {
   printf("release(path=%s)\n", path);
+  delete (file_info*)fileInfo->fh;
   return 0;
 }
 

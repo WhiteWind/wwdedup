@@ -49,33 +49,14 @@ int block_size();
 struct file_info;
 
 struct block_info {
-  weak_ptr<file_info> owner;
   off64_t blockNum;
   off64_t storageBlockNum;
-  bool dirty;
   shared_ptr<string> hash;
-  shared_ptr<vector<unsigned char> > data;
 
-  block_info(shared_ptr<file_info> aowner,
-             off64_t aStorageBlockNum)
-    : owner(aowner), storageBlockNum(aStorageBlockNum), dirty(false) {}
-  block_info(shared_ptr<file_info> aowner,
-             off64_t aoffset,
+  block_info(off64_t aoffset,
              shared_ptr<vector<unsigned char> > adata = nullptr,
              shared_ptr<string> ahash = nullptr)
-    : owner(aowner), blockNum(aoffset), hash(ahash), data(adata)
-    {
-      if (!hash && data) calc_hash();
-    }
-  void calc_hash()
-    {
-      hash = make_shared<string>(128, 0);
-      MurmurHash3_x64_128(data->data(), block_size(), HASH_SEED, (void*)hash->c_str());
-    }
-  bool operator < (const block_info &other ) const
-    {
-      return storageBlockNum < other.storageBlockNum;
-    }
+    : blockNum(aoffset), hash(ahash) {}
 };
 
 struct file_info {
@@ -103,6 +84,7 @@ public:
     bool dirEmpty(file_info dir);
     std::vector<struct file_info> *readdir(file_info *directory);
     off64_t getStorageBlockNum(file_info *finfo, off64_t fileBlockNum, string *hash = nullptr);
+    off64_t allocateStorageBlock(file_info *finfo, off64_t fileBlockNum, string hash, bool &present);
 };
 
 #endif // DATABASE_H

@@ -33,9 +33,10 @@ public:
 	bool isOpen();
 
         PreparedStmt* prepareStmt(const string sql);
+        sqlite_int64 lastInsertId();
 
 public:
-  bool transactionBegin(transaction_mode _mode = tr_deferred);
+        bool transactionBegin(transaction_mode _mode = tr_deferred);
 	bool transactionCommit();
 	bool transactionRollback();
 

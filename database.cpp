@@ -300,7 +300,7 @@ std::vector<struct file_info> *DataBase::readdir(file_info *directory)
 off64_t DataBase::getStorageBlockNum(file_info *finfo, off64_t fileBlockNum, string *hash)
 {
   shared_ptr<PreparedStmt> stmt(db.prepareStmt(
-        "SELECT h._ID, h.hash FROM fileBlocks b LEFT JOIN blockHashes h ON b.hash = h.hash WHERE b.file_id = ? AND b.offset = ?"));
+        "SELECT h._ID, h.hash FROM file_blocks b LEFT JOIN block_hashes h ON b.hash = h.hash WHERE b.file_id = ? AND b.offset = ?"));
   stmt->bindInt64(1, finfo->st.st_ino);
   stmt->bindInt64(2, fileBlockNum);
 
@@ -310,6 +310,39 @@ off64_t DataBase::getStorageBlockNum(file_info *finfo, off64_t fileBlockNum, str
     return stmt->getInt64(0);
   } else
     return 0;
+}
+
+off64_t DataBase::allocateStorageBlock(file_info *finfo, off64_t fileBlockNum, string hash, bool &present)
+{
+  db.transactionBegin(tr_exclusive);
+  try {
+    shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT _ID FROM block_hashes WHERE hash = ?"));
+    stmt->bindBlob(1, hash);
+    off64_t storageBlockNum;
+    if (stmt->next()) {
+      present = true;
+      storageBlockNum = stmt->getInt64(0);
+      stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = use_count + 1 WHERE hash = ?"));
+      stmt->bindBlob(1, hash);
+      stmt->next();
+    } else {
+      present = false;
+      stmt.reset(db.prepareStmt("INSERT INTO block_hashes (hash, use_count) VALUES(?, 1)"));
+      stmt->bindBlob(1, hash);
+      stmt->next();
+      storageBlockNum = db.lastInsertId();
+    }
+    stmt.reset(db.prepareStmt("INSERT INTO file_blocks (file_id, offset, hash) VALUES(?, ?, ?)"));
+    stmt->bindInt64(1, finfo->st.st_ino);
+    stmt->bindInt64(2, fileBlockNum);
+    stmt->bindBlob(3, hash);
+    stmt->next();
+    db.transactionCommit();
+    return storageBlockNum;
+  } catch (exception &e) {
+    db.transactionRollback();
+    throw e;
+  }
 }
 
 

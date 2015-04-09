@@ -52,7 +52,7 @@ Field definition_files[] =
     Field(DEFINITION_END),
 };
 
-DataBase::DataBase(std::string *db_url)
+DataBase::DataBase(const string *db_url)
 {
     db.open(*db_url);
     //define table object
@@ -126,7 +126,7 @@ file_info DataBase::getByPath(const path filename)
 {
   file_info res;
   res.st.st_ino = 0;
-  sql::PreparedStmt *stmt = db.prepareStmt("SELECT _ID, depth, size, mode, uid, gid, mtime, ctime, path FROM files WHERE path = ?");
+  shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT _ID, depth, size, mode, uid, gid, mtime, ctime, path FROM files WHERE path = ?"));
   stmt->bindString(1, filename.string());
   if (stmt->next()) {
     res.name = filename;
@@ -143,7 +143,6 @@ file_info DataBase::getByPath(const path filename)
     res.st.st_ino = 0;
     res.st.st_size = 0;
   }
-  delete stmt;
   return res;
 }
 
@@ -176,27 +175,24 @@ int DataBase::rename(const path oldPath, const path newPath)
     }
   }
   if (S_ISDIR(oldFile.st.st_mode)) {
-    PreparedStmt *stmt = db.prepareStmt("SELECT _ID, path, depth FROM files WHERE path LIKE ?");
+    shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT _ID, path, depth FROM files WHERE path LIKE ?"));
     stmt->bindString(1, oldPath.string() + "/%");
     while (stmt->next()) {
       sqlite3_uint64 id = stmt->getInt64(0);
       string fil = stmt->getString(1);
       fil.replace(0, oldPath.string().length(), newPath.string());
-      PreparedStmt * upd = db.prepareStmt("UPDATE files SET path = ?, depth = depth + ? WHERE _ID = ?");
+      shared_ptr<PreparedStmt> upd(db.prepareStmt("UPDATE files SET path = ?, depth = depth + ? WHERE _ID = ?"));
       upd->bindString(1, fil);
       upd->bindInt(2, depthDiff);
       upd->bindInt64(3, id);
       upd->next();
-      delete upd;
     }
-    delete stmt;
   }
-  PreparedStmt *stmt = db.prepareStmt("UPDATE files SET path = ?, depth = ? WHERE _ID = ?");
+  shared_ptr<PreparedStmt> stmt(db.prepareStmt("UPDATE files SET path = ?, depth = ? WHERE _ID = ?"));
   stmt->bindString(1, newPath.string());
   stmt->bindInt(2, destDir.depth + 1);
   stmt->bindInt64(3, oldFile.st.st_ino);
   stmt->next();
-  delete stmt;
   return 0;
 }
 
@@ -216,8 +212,8 @@ int DataBase::create(path filename, mode_t mode)
       return -EEXIST;
     time_t t = ::time(NULL);
     printf("Creating file %s with mode %o\n", filename.c_str(), (int)mode);
-    sql::PreparedStmt *stmt = db.prepareStmt("INSERT INTO files (path, depth, size, mode, uid, gid, mtime, ctime) VALUES \
-        (?, ?, ?, ?, ?, ?, ?, ?)");
+    shared_ptr<PreparedStmt> stmt(db.prepareStmt("INSERT INTO files (path, depth, size, mode, uid, gid, mtime, ctime) VALUES \
+        (?, ?, ?, ?, ?, ?, ?, ?)"));
     stmt->bindString(1, filename.c_str());
     stmt->bindInt(2, depth);
     stmt->bindInt(3, 0);
@@ -232,36 +228,33 @@ int DataBase::create(path filename, mode_t mode)
 
 int DataBase::remove(path filename)
 {
-  PreparedStmt *stmt = db.prepareStmt("DELETE FROM files WHERE path = ?");
+  shared_ptr<PreparedStmt> stmt(db.prepareStmt("DELETE FROM files WHERE path = ?"));
   stmt->bindString(1, filename.string());
   stmt->next();
-  delete stmt;
   return 0;
 }
 
 int DataBase::truncate(path filename, off_t newSize)
 {
-  PreparedStmt *stmt = db.prepareStmt("UPDATE files SET size = ? WHERE path = ?");
+  shared_ptr<PreparedStmt> stmt(db.prepareStmt("UPDATE files SET size = ? WHERE path = ?"));
   stmt->bindInt64(1, newSize);
   stmt->bindString(2, filename.string());
   stmt->next();
-  delete stmt;
   return 0;
 }
 
 int DataBase::utime(const path filename, struct utimbuf *ubuf)
 {
-  PreparedStmt *stmt = db.prepareStmt("UPDATE files SET mtime = ? WHERE path = ?");
+  shared_ptr<PreparedStmt> stmt(db.prepareStmt("UPDATE files SET mtime = ? WHERE path = ?"));
   stmt->bindInt(1, ubuf->modtime);
   stmt->bindString(2, filename.string());
   stmt->next();
-  delete stmt;
   return 0;
 }
 
 bool DataBase::dirEmpty(file_info dir)
 {
-  PreparedStmt *stmt = db.prepareStmt("SELECT COUNT(*) FROM files WHERE path LIKE ? AND depth = ?");
+  shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT COUNT(*) FROM files WHERE path LIKE ? AND depth = ?"));
   if (*dir.name.string().rbegin() == '/')
     stmt->bindString(1, dir.name.string()+"%");
   else
@@ -269,15 +262,14 @@ bool DataBase::dirEmpty(file_info dir)
   stmt->bindInt(2, dir.depth + 1);
   stmt->next();
   int cnt = stmt->getInt(0);
-  delete stmt;
   return !cnt;
 }
 
 std::vector<struct file_info> *DataBase::readdir(file_info *directory)
 {
-  std::vector<struct file_info> * res = new std::vector<struct file_info>();
-  sql::PreparedStmt *stmt = db.prepareStmt(
-        "SELECT _ID, path, size, mode, uid, gid, mtime, ctime FROM files WHERE path LIKE ? AND depth = ?");
+  vector<struct file_info> * res = new vector<struct file_info>();
+  shared_ptr<PreparedStmt> stmt(db.prepareStmt(
+        "SELECT _ID, path, size, mode, uid, gid, mtime, ctime FROM files WHERE path LIKE ? AND depth = ?"));
   if (*directory->name.string().rbegin() == '/')
     stmt->bindString(1, directory->name.string()+"%");
   else
@@ -297,8 +289,20 @@ std::vector<struct file_info> *DataBase::readdir(file_info *directory)
     //printf("Got record: %s, %d, %d, %d %o\n", fi.name.c_str(), (int)fi.st.st_ino, fi.depth, (int)fi.st.st_size, (int)fi.st.st_mode);
     res->push_back(fi);
   }
-  delete stmt;
   return res;
+}
+
+off64_t DataBase::getStorageOffset(file_info *finfo, off64_t file_offset)
+{
+  shared_ptr<PreparedStmt> stmt(db.prepareStmt(
+        "SELECT h._ID FROM fileBlocks b LEFT JOIN blockHashes h ON b.hash = h.hash WHERE b.file_id = ? AND b.offset = ?"));
+  stmt->bindInt64(1, finfo->st.st_ino);
+  stmt->bindInt64(2, file_offset);
+
+  if (stmt->next())
+    return stmt->getInt64(0);
+  else
+    return 0;
 }
 
 

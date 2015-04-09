@@ -36,6 +36,7 @@
 #include <cds/gc/dhp.h>
 #include <cds/container/skip_list_map_dhp.h>
 #include "database.h"
+#include "blockscache.h"
 
 class DedupFS {
 private: 

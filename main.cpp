@@ -17,12 +17,13 @@
 
 #include <cds/init.h>       // for cds::Initialize and cds::Terminate
 #include <cds/gc/dhp.h>      // for cds::HP (Hazard Pointer) SMR
+#include <fuse.h>
+#include <stdio.h>
+
 #include "wrap.h"
 #include "SqlCommon.h"
 #include "database.h"
-
-#include <fuse.h>
-#include <stdio.h>
+#include "blockscache.h"
 
 struct fuse_operations examplefs_oper;
 
@@ -34,8 +35,8 @@ void log_fun(void* priv, int errcode, const char* msg)
 int main(int argc, char *argv[]) {
   cds::Initialize();
 
-  if ( !cds::threading::Manager::isThreadAttached() )
-          cds::threading::Manager::attachThread();
+  cds::gc::DHP gc;
+  cds::threading::Manager::attachThread();
 
   int i, fuse_stat = 1;
 
@@ -91,15 +92,12 @@ int main(int argc, char *argv[]) {
 
   try
   {
-    //DataBase *db = new DataBase(argv[i]);
-    //db->test();
-
-    //set_database(db);
-
     for(; i < argc; i++) {
       argv[i] = argv[i+1];
     }
     argc--;
+
+    BlocksCache::start(&dbUrl);
 
     fuse_stat = fuse_main(argc, argv, &examplefs_oper, &dbUrl);
 
@@ -108,6 +106,8 @@ int main(int argc, char *argv[]) {
   } catch (sql::Exception e) {
     printf("ERROR: %s\r\n", e.msg().c_str());
   }
+
+  BlocksCache::stop();
 
   cds::Terminate();
   return fuse_stat;

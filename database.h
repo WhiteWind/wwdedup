@@ -23,6 +23,7 @@
 #include "SqlField.h"
 #include "SqlDatabase.h"
 #include "SqlPreparedStmt.h"
+#include "MurmurHash3.h"
 
 #include <dirent.h>
 #include <stdio.h>
@@ -37,11 +38,40 @@
 #include <utime.h>
 
 #define REPORT_EXCEPTION(e) printf("Exception %s: %s\n\tin: %s\n", typeid(e).name(), e.what(), __PRETTY_FUNCTION__);
+#define HASH_SEED 0xad64fac3
+
+using namespace std;
+
+static const unsigned int block_size = 65536;
+
+struct file_info;
+
+struct block_info {
+  block_info(shared_ptr<file_info> aowner, off64_t aoffset,
+             shared_ptr<vector<unsigned char> > adata,
+             shared_ptr<vector<unsigned char> > ahash = nullptr)
+    : owner(aowner), offset(aoffset), hash(ahash), data(adata)
+  {
+    if (!hash) calc_hash();
+  }
+  void calc_hash()
+  {
+    hash = make_shared<vector<unsigned char> >(128);
+    MurmurHash3_x64_128(data->data(), block_size, HASH_SEED, hash->data());
+  }
+  weak_ptr<file_info> owner;
+  off64_t offset;
+  off64_t storage_offset;
+  bool dirty;
+  shared_ptr<vector<unsigned char> > hash;
+  shared_ptr<vector<unsigned char> > data;
+};
 
 struct file_info {
   boost::filesystem::path name;
   int depth;
   struct stat st;
+  vector<shared_ptr<block_info> > blocks;
 };
 
 class DataBase
@@ -49,7 +79,7 @@ class DataBase
 private:
     sql::Database db;
 public:
-    DataBase(std::string* db_url);
+    DataBase(const std::string* db_url);
     ~DataBase();
     void test();
 
@@ -61,6 +91,7 @@ public:
     int utime(const boost::filesystem::path filename, struct utimbuf *ubuf);
     bool dirEmpty(file_info dir);
     std::vector<struct file_info> *readdir(file_info *directory);
+    off64_t getStorageOffset(file_info *finfo, off64_t file_offset);
 };
 
 #endif // DATABASE_H

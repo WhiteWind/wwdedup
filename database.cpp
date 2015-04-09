@@ -20,6 +20,11 @@
 using namespace sql;
 using namespace boost::filesystem;
 
+int block_size()
+{
+  return 1 << block_size_bits;
+};
+
 Field definition_blockHashes[] =
 {
     Field(FIELD_KEY),
@@ -292,16 +297,18 @@ std::vector<struct file_info> *DataBase::readdir(file_info *directory)
   return res;
 }
 
-off64_t DataBase::getStorageOffset(file_info *finfo, off64_t file_offset)
+off64_t DataBase::getStorageBlockNum(file_info *finfo, off64_t fileBlockNum, string *hash)
 {
   shared_ptr<PreparedStmt> stmt(db.prepareStmt(
-        "SELECT h._ID FROM fileBlocks b LEFT JOIN blockHashes h ON b.hash = h.hash WHERE b.file_id = ? AND b.offset = ?"));
+        "SELECT h._ID, h.hash FROM fileBlocks b LEFT JOIN blockHashes h ON b.hash = h.hash WHERE b.file_id = ? AND b.offset = ?"));
   stmt->bindInt64(1, finfo->st.st_ino);
-  stmt->bindInt64(2, file_offset);
+  stmt->bindInt64(2, fileBlockNum);
 
-  if (stmt->next())
+  if (stmt->next()) {
+    if (hash)
+      (*hash) = stmt->getBlob(2);
     return stmt->getInt64(0);
-  else
+  } else
     return 0;
 }
 

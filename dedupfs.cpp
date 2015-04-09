@@ -152,7 +152,7 @@ int DedupFS::Open(const char *path, struct fuse_file_info *fileInfo) {
 //	char fullPath[PATH_MAX];
 //	AbsPath(fullPath, path);
 //	fileInfo->fh = open(fullPath, fileInfo->flags);
-    return 0;
+  return 0;
 //  return -ENOSYS;
 }
 

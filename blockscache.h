@@ -3,29 +3,10 @@
 
 #include <string>
 #include <exception>
-#include <cds/gc/dhp.h>
-#include <cds/container/skip_list_set_dhp.h>
-#include <boost/filesystem.hpp>
+#include <system_error>
 #include "database.h"
+#include "dedup_types.h"
 
-struct storage_block {
-  off64_t storageBlockNum;
-  mutex lock;
-  shared_ptr<string> hash;
-  shared_ptr<vector<unsigned char> > data;
-  bool dirty;
-  storage_block(off64_t num): storageBlockNum(num) {}
-  bool operator < (const storage_block &other ) const
-    {
-      return storageBlockNum < other.storageBlockNum;
-    }
-
-  void calc_hash()
-    {
-      hash = make_shared<string>(128, 0);
-      MurmurHash3_x64_128(data->data(), block_size(), HASH_SEED, (void*)hash->c_str());
-    }
-};
 
 class BlocksCache
 {

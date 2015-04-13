@@ -20,11 +20,6 @@
 using namespace sql;
 using namespace boost::filesystem;
 
-int block_size()
-{
-  return 1 << block_size_bits;
-};
-
 Field definition_blockHashes[] =
 {
     Field(FIELD_KEY),
@@ -59,24 +54,30 @@ Field definition_files[] =
 
 DataBase::DataBase(const string *db_url)
 {
+    assert(db_url);
     db.open(*db_url);
-    //define table object
-    Table tbBlockHashes(db.getHandle(), "block_hashes", definition_blockHashes);
 
-    //create new table
-    tbBlockHashes.create();
+    try {
+      //define table object
+      Table tbBlockHashes(db.getHandle(), "block_hashes", definition_blockHashes);
 
-    Table tbFileBlocks(db.getHandle(), "file_blocks", definition_fileBlocks);
+      //create new table
+      tbBlockHashes.create();
 
-    //create new table
-    tbFileBlocks.create();
+      Table tbFileBlocks(db.getHandle(), "file_blocks", definition_fileBlocks);
 
-    Table tbFiles(db.getHandle(), "files", definition_files);
+      //create new table
+      tbFileBlocks.create();
 
-    //create new table
-    tbFiles.create();
+      Table tbFiles(db.getHandle(), "files", definition_files);
 
-    create("/", S_IFDIR | 0755);
+      //create new table
+      tbFiles.create();
+
+      create("/", S_IFDIR | 0755);
+    } catch (sql::Exception &e) {
+      printf("At DataBase::DataBase: %s", e.what());
+    }
 }
 
 void DataBase::test()
@@ -127,59 +128,59 @@ DataBase::~DataBase()
   db.close();
 }
 
-file_info DataBase::getByPath(const path filename)
+boost::intrusive_ptr<file_info> DataBase::getByPath(const path filename)
 {
-  file_info res;
-  res.st.st_ino = 0;
+  boost::intrusive_ptr<file_info> res = new file_info();
+  res->st.st_ino = 0;
   shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT _ID, depth, size, mode, uid, gid, mtime, ctime, path FROM files WHERE path = ?"));
   stmt->bindString(1, filename.string());
   if (stmt->next()) {
-    res.name = filename;
-    res.st.st_ino = stmt->getInt64(0);
-    res.depth = stmt->getInt(1);
-    res.st.st_size = stmt->getInt64(2);
-    res.st.st_mode = stmt->getInt(3);
-    res.st.st_uid = stmt->getInt(4);
-    res.st.st_gid = stmt->getInt(5);
-    res.st.st_mtime = stmt->getInt(6);
-    res.st.st_ctime = stmt->getInt(7);
+    res->name = filename;
+    res->st.st_ino = stmt->getInt64(0);
+    res->depth = stmt->getInt(1);
+    res->st.st_size = stmt->getInt64(2);
+    res->st.st_mode = stmt->getInt(3);
+    res->st.st_uid = stmt->getInt(4);
+    res->st.st_gid = stmt->getInt(5);
+    res->st.st_mtime = stmt->getInt(6);
+    res->st.st_ctime = stmt->getInt(7);
     //printf("Got record: %s, %d, %d, %d %o\n", stmt->getString(8).c_str(), (int)res.st.st_ino, res.depth, (int)res.st.st_size, (int)res.st.st_mode);
   } else {
-    res.st.st_ino = 0;
-    res.st.st_size = 0;
+    res->st.st_ino = 0;
+    res->st.st_size = 0;
   }
   return res;
 }
 
 int DataBase::rename(const path oldPath, const path newPath)
 {
-  file_info oldFile = getByPath(oldPath);
-  if (!oldFile.st.st_ino)
+  boost::intrusive_ptr<file_info> oldFile = getByPath(oldPath);
+  if (!oldFile->st.st_ino)
     return -ENOENT;
-  file_info destDir = getByPath(newPath.branch_path());
-  if (!destDir.st.st_ino)
+  boost::intrusive_ptr<file_info> destDir = getByPath(newPath.branch_path());
+  if (!destDir->st.st_ino)
     return -ENOENT;
-  if (!S_ISDIR(destDir.st.st_mode))
+  if (!S_ISDIR(destDir->st.st_mode))
     return -ENOTDIR;
-  int depthDiff = destDir.depth + 1 - oldFile.depth;
-  file_info newFile = getByPath(newPath);
-  if (newFile.st.st_ino) { // DST exists
-    if (S_ISDIR(oldFile.st.st_mode)) { // SRC is a directory
-      if (S_ISDIR(newFile.st.st_mode) && !dirEmpty(newFile))
+  int depthDiff = destDir->depth + 1 - oldFile->depth;
+  boost::intrusive_ptr<file_info> newFile = getByPath(newPath);
+  if (newFile->st.st_ino) { // DST exists
+    if (S_ISDIR(oldFile->st.st_mode)) { // SRC is a directory
+      if (S_ISDIR(newFile->st.st_mode) && !dirEmpty(newFile))
         return -ENOTEMPTY;  // DST is non-empty directory
-      if (!S_ISDIR(newFile.st.st_mode))
+      if (!S_ISDIR(newFile->st.st_mode))
         return -ENOTDIR; // DST is not a directory
       if (newPath.string().find(oldPath.string()) == 0)
         return -EINVAL; // DST is a subdir of SRC
     } else { // SRC is file
-      if (S_ISDIR(newFile.st.st_mode))
+      if (S_ISDIR(newFile->st.st_mode))
         return -EISDIR; // DST is a directory
     }
     if (remove(newPath)) {
       return -EBUSY;
     }
   }
-  if (S_ISDIR(oldFile.st.st_mode)) {
+  if (S_ISDIR(oldFile->st.st_mode)) {
     shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT _ID, path, depth FROM files WHERE path LIKE ?"));
     stmt->bindString(1, oldPath.string() + "/%");
     while (stmt->next()) {
@@ -195,8 +196,8 @@ int DataBase::rename(const path oldPath, const path newPath)
   }
   shared_ptr<PreparedStmt> stmt(db.prepareStmt("UPDATE files SET path = ?, depth = ? WHERE _ID = ?"));
   stmt->bindString(1, newPath.string());
-  stmt->bindInt(2, destDir.depth + 1);
-  stmt->bindInt64(3, oldFile.st.st_ino);
+  stmt->bindInt(2, destDir->depth + 1);
+  stmt->bindInt64(3, oldFile->st.st_ino);
   stmt->next();
   return 0;
 }
@@ -205,15 +206,15 @@ int DataBase::create(path filename, mode_t mode)
 {
     int depth = 0;
     if (filename != "/") {
-      file_info dir = getByPath(filename.branch_path());
-      if (!dir.st.st_ino)
+      boost::intrusive_ptr<file_info> dir = getByPath(filename.branch_path());
+      if (!dir->st.st_ino)
         return -ENOENT;
-      if ((dir.st.st_mode & S_IFMT) != S_IFDIR)
+      if ((dir->st.st_mode & S_IFMT) != S_IFDIR)
         return -ENOTDIR;
-      depth = dir.depth + 1;
+      depth = dir->depth + 1;
     }
-    file_info fi = getByPath(filename);
-    if (fi.st.st_ino)
+    boost::intrusive_ptr<file_info> fi = getByPath(filename);
+    if (fi->st.st_ino)
       return -EEXIST;
     time_t t = ::time(NULL);
     printf("Creating file %s with mode %o\n", filename.c_str(), (int)mode);
@@ -257,22 +258,22 @@ int DataBase::utime(const path filename, struct utimbuf *ubuf)
   return 0;
 }
 
-bool DataBase::dirEmpty(file_info dir)
+bool DataBase::dirEmpty(boost::intrusive_ptr<file_info> dir)
 {
   shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT COUNT(*) FROM files WHERE path LIKE ? AND depth = ?"));
-  if (*dir.name.string().rbegin() == '/')
-    stmt->bindString(1, dir.name.string()+"%");
+  if (*dir->name.string().rbegin() == '/')
+    stmt->bindString(1, dir->name.string()+"%");
   else
-    stmt->bindString(1, dir.name.string()+"/%");
-  stmt->bindInt(2, dir.depth + 1);
+    stmt->bindString(1, dir->name.string()+"/%");
+  stmt->bindInt(2, dir->depth + 1);
   stmt->next();
   int cnt = stmt->getInt(0);
   return !cnt;
 }
 
-std::vector<struct file_info> *DataBase::readdir(file_info *directory)
+std::vector<boost::intrusive_ptr<file_info> > DataBase::readdir(boost::intrusive_ptr<file_info> directory)
 {
-  vector<struct file_info> * res = new vector<struct file_info>();
+  vector<boost::intrusive_ptr<file_info> > res;
   shared_ptr<PreparedStmt> stmt(db.prepareStmt(
         "SELECT _ID, path, size, mode, uid, gid, mtime, ctime FROM files WHERE path LIKE ? AND depth = ?"));
   if (*directory->name.string().rbegin() == '/')
@@ -281,38 +282,57 @@ std::vector<struct file_info> *DataBase::readdir(file_info *directory)
     stmt->bindString(1, directory->name.string()+"/%");
   stmt->bindInt(2, directory->depth + 1);
   while (stmt->next()) {
-    struct file_info fi;    
-    fi.st.st_ino = stmt->getInt64(0);
-    fi.name = stmt->getString(1);
-    fi.depth = directory->depth + 1;
-    fi.st.st_size = stmt->getInt64(2);
-    fi.st.st_mode = stmt->getInt(3);
-    fi.st.st_uid = stmt->getInt(4);
-    fi.st.st_gid = stmt->getInt(5);
-    fi.st.st_mtime = stmt->getInt(6);
-    fi.st.st_ctime = stmt->getInt(7);
+    boost::intrusive_ptr<file_info> fi = new file_info();
+    fi->st.st_ino = stmt->getInt64(0);
+    fi->name = stmt->getString(1);
+    fi->depth = directory->depth + 1;
+    fi->st.st_size = stmt->getInt64(2);
+    fi->st.st_mode = stmt->getInt(3);
+    fi->st.st_uid = stmt->getInt(4);
+    fi->st.st_gid = stmt->getInt(5);
+    fi->st.st_mtime = stmt->getInt(6);
+    fi->st.st_ctime = stmt->getInt(7);
     //printf("Got record: %s, %d, %d, %d %o\n", fi.name.c_str(), (int)fi.st.st_ino, fi.depth, (int)fi.st.st_size, (int)fi.st.st_mode);
-    res->push_back(fi);
+    res.push_back(fi);
   }
   return res;
 }
 
-off64_t DataBase::getStorageBlockNum(file_info *finfo, off64_t fileBlockNum, string *hash)
+shared_ptr<storage_block> DataBase::getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum)
 {
-  shared_ptr<PreparedStmt> stmt(db.prepareStmt(
-        "SELECT h._ID, h.hash FROM file_blocks b LEFT JOIN block_hashes h ON b.hash = h.hash WHERE b.file_id = ? AND b.offset = ?"));
-  stmt->bindInt64(1, finfo->st.st_ino);
-  stmt->bindInt64(2, fileBlockNum);
+  shared_ptr<storage_block> block = make_shared<storage_block>();
+  if (fileBlockNum * block_size() > finfo->st.st_size)
+    return block;
 
-  if (stmt->next()) {
-    if (hash)
-      (*hash) = stmt->getBlob(2);
-    return stmt->getInt64(0);
-  } else
-    return 0;
+  finfo->blocks.ensure(fileBlockNum, [&](bool bNew, block_info &item, off64_t key)
+  {
+    unique_lock<mutex>(item.lock);
+    if (bNew && !item.loaded) {
+      shared_ptr<PreparedStmt> stmt(db.prepareStmt(
+            "SELECT h._ID, h.hash, h.use_count FROM file_blocks b LEFT JOIN block_hashes h ON b.hash = h.hash WHERE b.file_id = ? AND b.offset = ?"));
+      stmt->bindInt64(1, finfo->st.st_ino);
+      stmt->bindInt64(2, fileBlockNum);
+
+      if (stmt->next()) {
+        item.empty = false;
+        item.storageBlockNum = stmt->getInt64(0);
+        item.hash = make_shared<string>(stmt->getBlob(1));
+        block->use_count = stmt->getInt(2);
+      } else {
+        item.empty = true;
+        item.storageBlockNum = 0;
+        block->use_count = 0;
+      }
+      item.loaded = true;
+    }
+    block->storageBlockNum = item.storageBlockNum;
+    block->hash = item.hash;
+  });
+
+  return block;
 }
 
-off64_t DataBase::allocateStorageBlock(file_info *finfo, off64_t fileBlockNum, string hash, bool &present)
+off64_t DataBase::allocateStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, string hash, bool &present)
 {
   db.transactionBegin(tr_exclusive);
   try {
@@ -324,19 +344,19 @@ off64_t DataBase::allocateStorageBlock(file_info *finfo, off64_t fileBlockNum, s
       storageBlockNum = stmt->getInt64(0);
       stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = use_count + 1 WHERE hash = ?"));
       stmt->bindBlob(1, hash);
-      stmt->next();
+      stmt->executeUpdate();
     } else {
       present = false;
       stmt.reset(db.prepareStmt("INSERT INTO block_hashes (hash, use_count) VALUES(?, 1)"));
       stmt->bindBlob(1, hash);
-      stmt->next();
+      stmt->executeUpdate();
       storageBlockNum = db.lastInsertId();
     }
     stmt.reset(db.prepareStmt("INSERT INTO file_blocks (file_id, offset, hash) VALUES(?, ?, ?)"));
     stmt->bindInt64(1, finfo->st.st_ino);
     stmt->bindInt64(2, fileBlockNum);
     stmt->bindBlob(3, hash);
-    stmt->next();
+    stmt->executeUpdate();
     db.transactionCommit();
     return storageBlockNum;
   } catch (exception &e) {

@@ -56,9 +56,12 @@ bool Database::open(string filename)
 
   if (isOpen())
   {
-    RecordSet rs(_db);
-    rs.query("PRAGMA journal_mode=WAL");
-    return true;
+    PreparedStmt stmt(_db, "PRAGMA journal_mode=WAL");
+    while (true)
+      try {
+        stmt.executeUpdate();
+        return true;
+      } catch (DatabaseLockedException &e) {}
   } else {
     _err_msg = sqlite3_errmsg(_db);
   }

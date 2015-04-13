@@ -38,6 +38,7 @@ namespace sql
 
         void reset();
         bool next();
+        void executeUpdate();
 
         int getInt(int index);
         sqlite3_int64 getInt64(int index);

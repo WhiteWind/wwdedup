@@ -61,6 +61,17 @@ bool PreparedStmt::next()
     THROW_EXCEPTION("Error executing prepared statement: " + getError())
 }
 
+void PreparedStmt::executeUpdate()
+{
+  int res = sqlite3_step(_stmt);
+  if (res == SQLITE_DONE || res == SQLITE_ROW) {
+    reset();
+  } else if ((res & 0xFF) == SQLITE_LOCKED || (res & 0xFF) == SQLITE_BUSY)
+    throw DatabaseLockedException("Database is locked");
+  else
+    THROW_EXCEPTION("Error executing prepared statement: " + getError())
+}
+
 void PreparedStmt::checkColumn(int index)
 {
     if (_columnCount < 0)

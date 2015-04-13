@@ -34,20 +34,20 @@ DedupFS* DedupFS::Instance() {
 }
 
 DedupFS::DedupFS() {
-  printf("%lX/%d: DedupFS::DedupFS()\n", pthread_self(), th_count++);
+  printf("%lX/%d: DedupFS::DedupFS()\n", pthread_self(), ++th_count);
   db = new DataBase(static_cast<std::string*>(fuse_get_context()->private_data));
 }
 
 DedupFS::~DedupFS() {
-  printf("%lX/%d: DedupFS::~DedupFS()\n", pthread_self(), th_count--);
+  printf("%lX/%d: DedupFS::~DedupFS()\n", pthread_self(), --th_count);
   delete db;
 }
 
 int DedupFS::Getattr(const char *path, struct stat *statbuf) {
-  file_info fi = db->getByPath(path);
-  if (fi.st.st_ino) {
-    *statbuf = fi.st;
-    printf("getattr: SUCCESS %s %d %o\n", path, (int)fi.st.st_ino, (int)fi.st.st_mode);
+  boost::intrusive_ptr<file_info> fi = db->getByPath(path);
+  if (fi->st.st_ino) {
+    *statbuf = fi->st;
+    printf("getattr: SUCCESS %s %d %o\n", path, (int)fi->st.st_ino, (int)fi->st.st_mode);
     return 0;
   } else {
     printf("getattr: ENOENT %s\n", path);
@@ -80,18 +80,18 @@ int DedupFS::Mkdir(const char *path, mode_t mode) {
 
 int DedupFS::Unlink(const char *path) {
   printf("unlink(path=%s)\n", path);
-  file_info fi = db->getByPath(path);
-  if (!fi.st.st_ino)
+  boost::intrusive_ptr<file_info> fi = db->getByPath(path);
+  if (!fi->st.st_ino)
     return -ENOENT;
-  if (S_ISDIR(fi.st.st_mode))
+  if (S_ISDIR(fi->st.st_mode))
     return -EISDIR;
   return db->remove(path);
 }
 
 int DedupFS::Rmdir(const char *path) {
   printf("rmkdir(path=%s\n)", path);
-  file_info fi = db->getByPath(path);
-  if (!S_ISDIR(fi.st.st_mode))
+  boost::intrusive_ptr<file_info> fi = db->getByPath(path);
+  if (!S_ISDIR(fi->st.st_mode))
     return -ENOTDIR;
   if (!db->dirEmpty(fi))
     return -ENOTEMPTY;
@@ -152,12 +152,12 @@ int DedupFS::Open(const char *path, struct fuse_file_info *fileInfo) {
 //	char fullPath[PATH_MAX];
 //	AbsPath(fullPath, path);
 //	fileInfo->fh = open(fullPath, fileInfo->flags);
-  file_info fi = db->getByPath(path);
-  if (!fi.st.st_ino)
+  boost::intrusive_ptr<file_info> fi = db->getByPath(path);
+  if (!fi->st.st_ino)
     return -ENOENT;
-  if (!S_ISREG(fi.st.st_mode))
+  if (!S_ISREG(fi->st.st_mode))
     return -EIO;
-  fileInfo->fh = (uint64_t)new file_info(fi);
+  fileInfo->fh = (uint64_t)fi.detach();
   return 0;
 //  return -ENOSYS;
 }
@@ -166,9 +166,9 @@ int DedupFS::Create(const char *path, mode_t mode, struct fuse_file_info *fileIn
 {
   printf("create(path=%s, mode=%o)\n", path, (int)mode);
   int res = db->create(path, mode);
-  if (res >= 0) {
-    file_info *fi = new file_info(db->getByPath(path));
-    fileInfo->fh = (uint64_t)fi;
+  if (res >= 0) { // FIXME: return file_info, not int
+    boost::intrusive_ptr<file_info> fi = db->getByPath(path);
+    fileInfo->fh = (uint64_t)fi.detach();
   } else
     fileInfo->fh = 0;
   return res;
@@ -202,7 +202,7 @@ int DedupFS::Flush(const char *path, struct fuse_file_info *fileInfo) {
 
 int DedupFS::Release(const char *path, struct fuse_file_info *fileInfo) {
   printf("release(path=%s)\n", path);
-  delete (file_info*)fileInfo->fh;
+  intrusive_ptr_release((file_info*)fileInfo->fh);
   return 0;
 }
 
@@ -253,18 +253,16 @@ int DedupFS::Removexattr(const char *path, const char *name) {
 
 int DedupFS::Opendir(const char *path, struct fuse_file_info *fileInfo) {
   printf("opendir(path=%s)", path);
-  file_info *fi = new file_info(db->getByPath(path));
+  boost::intrusive_ptr<file_info> fi = db->getByPath(path);
   if (fi->st.st_ino) {
     if (!S_ISDIR(fi->st.st_mode)) {
-      delete fi;
       printf(": ENOTDIR %o\n", (int)fi->st.st_mode);
       return -ENOTDIR;
     }
-    fileInfo->fh = (uint64_t)fi;
+    fileInfo->fh = (uint64_t)fi.detach();
     printf(": SUCCESS\n");
     return 0;
   } else {
-    delete fi;
     printf(": ENOENT\n");
     return -ENOENT;
   }
@@ -272,27 +270,20 @@ int DedupFS::Opendir(const char *path, struct fuse_file_info *fileInfo) {
 
 int DedupFS::Readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fileInfo) {
   printf("readdir(path=%s, offset=%d)\n", path, (int)offset);
-  std::vector<file_info> * files = NULL;
-  files = db->readdir((file_info*)fileInfo->fh);
-  try {
-    filler(buf, ".", &((file_info*)fileInfo->fh)->st, 0);
-    filler(buf, "..", &((file_info*)fileInfo->fh)->st, 0);
-    for (std::vector<file_info>::iterator file = files->begin(); file != files->end(); ++file) {
-      if (filler(buf, file->name.leaf().c_str(), &(file->st), 0))
-        break;
-    }
-  } catch (std::exception &e) {
-    REPORT_EXCEPTION(e)
-    delete files;
-    return -EIO;
+  boost::intrusive_ptr<file_info> fi = (file_info*)fileInfo->fh;
+  std::vector<boost::intrusive_ptr<file_info> > files = db->readdir(fi);
+  filler(buf, ".", &(fi->st), 0);
+  filler(buf, "..", &(fi->st), 0);
+  for (auto file = files.begin(); file != files.end(); ++file) {
+    if (filler(buf, (*file)->name.leaf().c_str(), &((*file)->st), 0))
+      break;
   }
-  delete files;
   return 0;
 }
 
 int DedupFS::Releasedir(const char *path, struct fuse_file_info *fileInfo) {
   printf("releasedir(path=%s)\n", path);
-  delete (file_info*)fileInfo->fh;
+  intrusive_ptr_release((file_info*)fileInfo->fh);
   return 0;
 }
 

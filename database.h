@@ -18,13 +18,6 @@
 #ifndef DATABASE_H
 #define DATABASE_H
 
-#include "SqlField.h"
-#include "SqlTable.h"
-#include "SqlField.h"
-#include "SqlDatabase.h"
-#include "SqlPreparedStmt.h"
-#include "MurmurHash3.h"
-
 #include <dirent.h>
 #include <stdio.h>
 #include <sys/stat.h>
@@ -35,36 +28,21 @@
 #include <time.h>
 #include <cstring>
 #include <boost/filesystem/path.hpp>
+#include <boost/smart_ptr.hpp>
 #include <utime.h>
 
+#include "SqlField.h"
+#include "SqlTable.h"
+#include "SqlField.h"
+#include "SqlDatabase.h"
+#include "SqlPreparedStmt.h"
+#include "dedup_types.h"
+
 #define REPORT_EXCEPTION(e) printf("Exception %s: %s\n\tin: %s\n", typeid(e).name(), e.what(), __PRETTY_FUNCTION__);
-#define HASH_SEED 0xad64fac3
 
 using namespace std;
 
-static const unsigned int block_size_bits = 16;
 
-int block_size();
-
-struct file_info;
-
-struct block_info {
-  off64_t blockNum;
-  off64_t storageBlockNum;
-  shared_ptr<string> hash;
-
-  block_info(off64_t aoffset,
-             shared_ptr<vector<unsigned char> > adata = nullptr,
-             shared_ptr<string> ahash = nullptr)
-    : blockNum(aoffset), hash(ahash) {}
-};
-
-struct file_info {
-  boost::filesystem::path name;
-  int depth;
-  struct stat st;
-  vector<shared_ptr<block_info> > blocks;
-};
 
 class DataBase
 {
@@ -75,16 +53,16 @@ public:
     ~DataBase();
     void test();
 
-    file_info getByPath(const boost::filesystem::path filename);
+    boost::intrusive_ptr<file_info> getByPath(const boost::filesystem::path filename);
     int rename(const boost::filesystem::path oldPath, const boost::filesystem::path newPath);
     int create(boost::filesystem::path path, mode_t mode);
     int remove(boost::filesystem::path filename);
     int truncate(boost::filesystem::path filename, off_t newSize);
     int utime(const boost::filesystem::path filename, struct utimbuf *ubuf);
-    bool dirEmpty(file_info dir);
-    std::vector<struct file_info> *readdir(file_info *directory);
-    off64_t getStorageBlockNum(file_info *finfo, off64_t fileBlockNum, string *hash = nullptr);
-    off64_t allocateStorageBlock(file_info *finfo, off64_t fileBlockNum, string hash, bool &present);
+    bool dirEmpty(boost::intrusive_ptr<file_info> dir);
+    std::vector<boost::intrusive_ptr<file_info> > readdir(boost::intrusive_ptr<file_info> directory);
+    shared_ptr<storage_block> getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum);
+    off64_t allocateStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, string hash, bool &present);
 };
 
 #endif // DATABASE_H

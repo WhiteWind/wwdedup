@@ -22,7 +22,7 @@ ENDIF(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -fno-strict-aliasing -mcx16")
 SET(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
-SET(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -D_DEBUG")
+SET(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -D_DEBUG -fsanitize=address -fno-omit-frame-pointer")
 
 add_library(cds SHARED ${CDS_SRC_LIST})
 

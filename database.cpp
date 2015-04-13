@@ -306,7 +306,7 @@ shared_ptr<storage_block> DataBase::getStorageBlock(boost::intrusive_ptr<file_in
 
   finfo->blocks.ensure(fileBlockNum, [&](bool bNew, block_info &item, off64_t key)
   {
-    unique_lock<mutex>(item.lock);
+    unique_lock<mutex> guard(item.lock);
     if (bNew && !item.loaded) {
       shared_ptr<PreparedStmt> stmt(db.prepareStmt(
             "SELECT h._ID, h.hash, h.use_count FROM file_blocks b LEFT JOIN block_hashes h ON b.hash = h.hash WHERE b.file_id = ? AND b.offset = ?"));
@@ -332,33 +332,74 @@ shared_ptr<storage_block> DataBase::getStorageBlock(boost::intrusive_ptr<file_in
   return block;
 }
 
-off64_t DataBase::allocateStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, string hash, bool &present)
+shared_ptr<storage_block> DataBase::allocateStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, shared_ptr<string> hash)
 {
   db.transactionBegin(tr_exclusive);
+  shared_ptr<storage_block> res = make_shared<storage_block>();
   try {
-    shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT _ID FROM block_hashes WHERE hash = ?"));
-    stmt->bindBlob(1, hash);
-    off64_t storageBlockNum;
+    shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT _ID, use_count FROM block_hashes WHERE hash = ?"));
+    stmt->bindBlob(1, *hash);
     if (stmt->next()) {
-      present = true;
-      storageBlockNum = stmt->getInt64(0);
+      //present = true;
+      res->storageBlockNum = stmt->getInt64(0);
+      res->use_count = stmt->getInt(1) + 1;
+      res->hash = hash;
+      res->loaded = false;
+      res->dirty = false;
       stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = use_count + 1 WHERE hash = ?"));
-      stmt->bindBlob(1, hash);
+      stmt->bindBlob(1, *hash);
       stmt->executeUpdate();
     } else {
-      present = false;
+      //present = false;
       stmt.reset(db.prepareStmt("INSERT INTO block_hashes (hash, use_count) VALUES(?, 1)"));
-      stmt->bindBlob(1, hash);
+      stmt->bindBlob(1, *hash);
       stmt->executeUpdate();
-      storageBlockNum = db.lastInsertId();
+      res->storageBlockNum = db.lastInsertId();
+      res->use_count = 1;
+      res->hash = hash;
+      res->loaded = true;
+      res->dirty = true;
     }
     stmt.reset(db.prepareStmt("INSERT INTO file_blocks (file_id, offset, hash) VALUES(?, ?, ?)"));
     stmt->bindInt64(1, finfo->st.st_ino);
     stmt->bindInt64(2, fileBlockNum);
-    stmt->bindBlob(3, hash);
+    stmt->bindBlob(3, *hash);
     stmt->executeUpdate();
     db.transactionCommit();
-    return storageBlockNum;
+    finfo->blocks.ensure(fileBlockNum, [res, hash](bool bNew, block_info & item, off64_t key) {
+      unique_lock<mutex> guard(item.lock);
+      item.empty = false;
+      item.loaded = true;
+      item.hash = hash;
+      item.storageBlockNum = res->storageBlockNum;
+    });
+    return res;
+  } catch (exception &e) {
+    db.transactionRollback();
+    throw e;
+  }
+}
+
+void DataBase::releaseStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, shared_ptr<storage_block> block)
+{
+  db.transactionBegin(tr_exclusive);
+  try {
+    shared_ptr<PreparedStmt> stmt(db.prepareStmt("DELETE FROM file_blocks WHERE file_id = ? AND offset = ?"));
+    stmt->bindInt64(1, finfo->st.st_ino);
+    stmt->bindInt64(2, fileBlockNum);
+    stmt->executeUpdate();
+
+    stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = use_count - 1 WHERE hash = ?"));
+    stmt->bindBlob(1, *(block->hash));
+    stmt->executeUpdate();
+    db.transactionCommit();
+    block->use_count--;
+    finfo->blocks.find(fileBlockNum, [](block_info &item, off64_t key) {
+      unique_lock<mutex> guard(item.lock);
+      item.hash.reset();
+      item.empty = true;
+      item.storageBlockNum = 0;
+    });
   } catch (exception &e) {
     db.transactionRollback();
     throw e;

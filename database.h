@@ -62,7 +62,8 @@ public:
     bool dirEmpty(boost::intrusive_ptr<file_info> dir);
     std::vector<boost::intrusive_ptr<file_info> > readdir(boost::intrusive_ptr<file_info> directory);
     shared_ptr<storage_block> getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum);
-    off64_t allocateStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, string hash, bool &present);
+    shared_ptr<storage_block> allocateStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, shared_ptr<string> hash);
+    void releaseStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, shared_ptr<storage_block> block);
 };
 
 #endif // DATABASE_H

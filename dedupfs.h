@@ -79,7 +79,7 @@ public:
   int Releasedir(const char *path, struct fuse_file_info *fileInfo);
   int Fsyncdir(const char *path, int datasync, struct fuse_file_info *fileInfo);
   void *Init(struct fuse_conn_info *conn);
-  int Truncate(const char *path, off_t offset, struct fuse_file_info *fileInfo);
+  int Ftruncate(const char *path, off64_t offset, struct fuse_file_info *fileInfo);
 };
 
 

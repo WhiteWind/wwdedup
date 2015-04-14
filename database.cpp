@@ -16,6 +16,7 @@
 */
 
 #include "database.h"
+#include "blockscache.h"
 
 using namespace sql;
 using namespace boost::filesystem;
@@ -242,10 +243,54 @@ int DataBase::remove(path filename)
 
 int DataBase::truncate(path filename, off_t newSize)
 {
-  shared_ptr<PreparedStmt> stmt(db.prepareStmt("UPDATE files SET size = ? WHERE path = ?"));
-  stmt->bindInt64(1, newSize);
-  stmt->bindString(2, filename.string());
-  stmt->next();
+  boost::intrusive_ptr<file_info> fi = getByPath(filename);
+  if (!fi->st.st_ino)
+    return -ENOENT;
+  if (!S_ISREG(fi->st.st_mode))
+    return -EBADF;
+  return ftruncate(fi, newSize);
+}
+
+int DataBase::ftruncate(boost::intrusive_ptr<file_info> fi, off_t newSize)
+{
+  if (newSize < 0)
+    return -EINVAL;
+  if (fi->st.st_size == newSize)
+    return 0;
+  db.transactionBegin(tr_exclusive);
+  try {
+    if (newSize < fi->st.st_size) {
+      shared_ptr<PreparedStmt> stmt(db.prepareStmt(
+          "SELECT h._ID, b.offset, h.use_count \
+          FROM file_blocks b LEFT JOIN block_hashes h \
+          ON b.hash = h.hash \
+          WHERE b.file_id = ? AND b.offset > ?"));
+      stmt->bindInt64(1, fi->st.st_ino);
+      stmt->bindInt64(2, newSize >> block_size_bits);
+      stringstream buf;
+      while (stmt->next()) {
+        if (buf.tellp())
+          buf << ", ";
+        buf << stmt->getInt64(0);
+        fi->blocks.erase(stmt->getInt64(1));
+        //FIXME: update use_count in BlocksCache
+      }
+      stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = use_count - 1 WHERE _ID IN ("+buf.str()+") AND use_count > 0"));
+      stmt->executeUpdate();
+      stmt.reset(db.prepareStmt("DELETE FROM file_blocks WHERE file_id = ? AND offset > ?"));
+      stmt->bindInt64(1, fi->st.st_ino);
+      stmt->bindInt64(2, newSize >> block_size_bits);
+      stmt->executeUpdate();
+    }
+    shared_ptr<PreparedStmt> stmt(db.prepareStmt("UPDATE files SET size = ? WHERE _ID = ?"));
+    stmt->bindInt64(1, newSize);
+    stmt->bindInt64(2, fi->st.st_ino);
+    stmt->next();
+  } catch (exception &e) {
+    db.transactionRollback();
+    throw e;
+  }
+  db.transactionCommit();
   return 0;
 }
 
@@ -357,7 +402,7 @@ shared_ptr<storage_block> DataBase::allocateStorageBlock(boost::intrusive_ptr<fi
       res->storageBlockNum = db.lastInsertId();
       res->use_count = 1;
       res->hash = hash;
-      res->loaded = true;
+      res->loaded = false;
       res->dirty = true;
     }
     stmt.reset(db.prepareStmt("INSERT INTO file_blocks (file_id, offset, hash) VALUES(?, ?, ?)"));

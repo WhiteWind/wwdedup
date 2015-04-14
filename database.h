@@ -27,6 +27,7 @@
 #include <errno.h>
 #include <time.h>
 #include <cstring>
+#include <sstream>
 #include <boost/filesystem/path.hpp>
 #include <boost/smart_ptr.hpp>
 #include <utime.h>
@@ -58,6 +59,7 @@ public:
     int create(boost::filesystem::path path, mode_t mode);
     int remove(boost::filesystem::path filename);
     int truncate(boost::filesystem::path filename, off_t newSize);
+    int ftruncate(boost::intrusive_ptr<file_info> fi, off_t newSize);
     int utime(const boost::filesystem::path filename, struct utimbuf *ubuf);
     bool dirEmpty(boost::intrusive_ptr<file_info> dir);
     std::vector<boost::intrusive_ptr<file_info> > readdir(boost::intrusive_ptr<file_info> directory);

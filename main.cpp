@@ -75,6 +75,7 @@ int main(int argc, char *argv[]) {
   examplefs_oper.releasedir = wrap_releasedir;
   examplefs_oper.fsyncdir = wrap_fsyncdir;
   examplefs_oper.init = wrap_init;
+  examplefs_oper.ftruncate = wrap_ftruncate;
 
   printf("%lX: mounting file system...\n", pthread_self());
 

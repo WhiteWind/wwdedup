@@ -289,3 +289,12 @@ void *wrap_init(struct fuse_conn_info *conn) {
   }
 }
 
+int wrap_ftruncate(const char *path, off_t newSize, fuse_file_info *fileInfo)
+{
+  try {
+    return DedupFS::Instance()->Ftruncate(path, newSize, fileInfo);
+  } catch (std::exception &e) {
+    REPORT_EXCEPTION(e)
+    return -EIO;
+  }
+}

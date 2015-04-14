@@ -48,6 +48,10 @@ struct storage_block {
   storage_block(off64_t num)
     : storageBlockNum(num), use_count(0), hash(), data(), dirty(false), loaded(false)
     { printf("storage_block(%ld)\n", num); }
+  storage_block(const storage_block &other)
+    : storageBlockNum(other.storageBlockNum), use_count(other.use_count),
+      hash(other.hash), data(other.data), dirty(other.dirty), loaded(other.loaded)
+  {}
   ~storage_block() { printf("~storage_block()\n"); }
 
   bool operator < (const storage_block &other ) const

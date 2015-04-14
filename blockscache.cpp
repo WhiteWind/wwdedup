@@ -24,6 +24,17 @@ void BlocksCache::run(const string *db_url)
   db = new DataBase(db_url);
   while (!terminated) {
     try {
+      for (auto iter = _blocks.begin(); iter != _blocks.end(); ++iter) {
+        shared_ptr<storage_block> block = *iter;
+        unique_lock<mutex> guard(block->lock);
+        if (block->dirty) {
+          printf("Writing block %lX (%x%x%x%x)\n", block->storageBlockNum,
+                 block->data[0], block->data[1], block->data[2], block->data[3]);
+          lseek(_storage, block->storageBlockNum << block_size_bits, SEEK_SET);
+          write(_storage, block->data.data(), block_size());
+          block->dirty = false;
+        }
+      }
       this_thread::yield();
     } catch (exception &e) {
       REPORT_EXCEPTION(e)
@@ -68,12 +79,71 @@ BlocksCache::~BlocksCache()
   close(_storage);
 }
 
-void BlocksCache::_write(file_info *finfo, char *buf, off64_t size, off64_t offset)
+void BlocksCache::_writeBlock(boost::intrusive_ptr<file_info> finfo, vector<unsigned char> &data, off64_t fileBlockNum)
 {
-
+  shared_ptr<string> hash = make_shared<string>(16, '\0');
+  MurmurHash3_x64_128(data.data(), block_size(), HASH_SEED, (void*)hash->c_str());
+  shared_ptr<storage_block> newBlock = db->allocateStorageBlock(finfo, fileBlockNum, hash);
+  newBlock->data = move(data);
+  _blocks.ensure(newBlock, [](bool bNew, shared_ptr<storage_block> &item, shared_ptr<storage_block> key){
+    unique_lock<mutex> guard(item->lock);
+    if (bNew && item != key) {
+      item->data = key->data;
+      item->dirty = key->dirty;
+      item->hash = key->hash;
+      item->use_count = key->use_count;
+    } else {
+      if (item->hash != key->hash) {
+        assert(item->use_count == 0);
+        item->dirty = true;
+        item->hash = key->hash;
+      } else if (!item->loaded)
+        item->data = key->data;
+      item->use_count = key->use_count;
+    }
+    item->loaded = true;
+  });
 }
 
-off64_t BlocksCache::_read(file_info *finfo, char *buf, off64_t size, off64_t offset)
+off64_t BlocksCache::_write(boost::intrusive_ptr<file_info> finfo, const char *buf, off64_t size, off64_t offset)
+{
+  if (size + offset > finfo->st.st_size)
+    db->ftruncate(finfo, size+offset);
+  off64_t startBlockNum = offset >> block_size_bits;
+  int startOffset = offset - (startBlockNum << block_size_bits);
+  off64_t endBlockNum = (offset + size - 1) >> block_size_bits;
+  int endBlockSize = (offset + size) - (endBlockNum << block_size_bits);
+  off64_t factSize = 0;
+  int chunkSize = min(size, (off64_t)(block_size() - startOffset));
+  {
+    shared_ptr<storage_block> firstBlock = _getBlock(finfo, startBlockNum);
+    vector<unsigned char> data = vector<unsigned char>(firstBlock->data);
+    if (firstBlock->storageBlockNum)
+      db->releaseStorageBlock(finfo, startBlockNum, firstBlock);
+    memcpy(data.data() + startOffset, buf + factSize, chunkSize);
+    _writeBlock(finfo, data, startBlockNum);
+  }
+  factSize += chunkSize;
+
+  off64_t curBlockNum = startBlockNum;
+  while (factSize < size) {
+    assert(curBlockNum <= endBlockNum);
+    {
+      //FIXME: no need to read from disk if replacing whole block
+      shared_ptr<storage_block> oldBlock = _getBlock(finfo, ++curBlockNum);
+      vector<unsigned char> data = vector<unsigned char>(oldBlock->data);
+      if (oldBlock->storageBlockNum)
+        db->releaseStorageBlock(finfo, curBlockNum, oldBlock);
+      chunkSize = min((off64_t)block_size(), size - factSize);
+      memcpy(data.data(), buf + factSize, chunkSize);
+      _writeBlock(finfo, data, curBlockNum);
+    }
+    factSize += chunkSize;
+  }
+  return factSize;
+}
+
+off64_t BlocksCache::_read(boost::intrusive_ptr<file_info> finfo, char *buf, off64_t size, off64_t offset)
 {
   if (size + offset > finfo->st.st_size)
     size = finfo->st.st_size - offset;
@@ -95,12 +165,12 @@ off64_t BlocksCache::_read(file_info *finfo, char *buf, off64_t size, off64_t of
   return factSize;
 }
 
-void BlocksCache::_erase(file_info *finfo, off64_t size, off64_t offset)
+void BlocksCache::_erase(boost::intrusive_ptr<file_info> finfo, off64_t size, off64_t offset)
 {
 
 }
 
-shared_ptr<storage_block> BlocksCache::_getBlock(file_info *finfo, off64_t blockNum)
+shared_ptr<storage_block> BlocksCache::_getBlock(boost::intrusive_ptr<file_info> finfo, off64_t blockNum)
 {
   string hash;
   //off64_t storageBlockNum ;
@@ -114,12 +184,13 @@ shared_ptr<storage_block> BlocksCache::_getBlock(file_info *finfo, off64_t block
   shared_ptr<storage_block> res;
   _blocks.ensure(block,
                  [this, &res](bool bNew, shared_ptr<storage_block> &item, shared_ptr<storage_block> key) {
-    unique_lock<mutex>(item->lock);
+    unique_lock<mutex> guard(item->lock);
     if (bNew && !item->loaded) {
       assert(key->use_count > 0);
       item->use_count = key->use_count;
       item->data = vector<unsigned char>(block_size(), '\0');
-      if (read(_storage, item->data.data(), block_size() != block_size()))
+      lseek(_storage, item->storageBlockNum << block_size_bits, SEEK_SET);
+      if (read(_storage, item->data.data(), block_size()) != block_size())
         throw system_error(errno, system_category(), "Error reading block from storage");
     }
     item->loaded = true;

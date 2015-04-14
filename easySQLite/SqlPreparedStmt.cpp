@@ -24,7 +24,10 @@ namespace sql
 PreparedStmt::PreparedStmt(sqlite3 *db, std::string sql)
     :_db(db),_columnCount(-2)
 {
-    int err = sqlite3_prepare_v2(db, sql.c_str(), sql.length() + 1, &_stmt, NULL);
+    int err = 0;
+    do {
+      err = sqlite3_prepare_v2(db, sql.c_str(), sql.length() + 1, &_stmt, NULL);
+    } while (err == SQLITE_LOCKED || err == SQLITE_BUSY);
     if (err != SQLITE_OK)
         THROW_EXCEPTION("Error creating prepared statement: " + getError())
 }

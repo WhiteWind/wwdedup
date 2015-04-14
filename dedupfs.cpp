@@ -181,9 +181,8 @@ int DedupFS::Read(const char *path, char *buf, size_t size, off_t offset, struct
 }
 
 int DedupFS::Write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
-        printf("write(path=%s, size=%d, offset=%d)\n", path, (int)size, (int)offset);
-//	return RETURN_ERRNO(pwrite(fileInfo->fh, buf, size, offset));
-  return -ENOSYS;
+  printf("write(path=%s, size=%d, offset=%d)\n", path, (int)size, (int)offset);
+  return BlocksCache::writeBuf((file_info*)fileInfo->fh, buf, size, offset);
 }
 
 int DedupFS::Statfs(const char *path, struct statvfs *statInfo) {
@@ -295,12 +294,9 @@ void *DedupFS::Init(struct fuse_conn_info *conn) {
   return fuse_get_context()->private_data;
 }
 
-int DedupFS::Truncate(const char *path, off_t offset, struct fuse_file_info *fileInfo) {
-//	printf("truncate(path=%s, offset=%d)\n", path, (int)offset);
-//	char fullPath[PATH_MAX];
-//	AbsPath(fullPath, path);
-//	return RETURN_ERRNO(ftruncate(fileInfo->fh, offset));
-  return -ENOSYS;
+int DedupFS::Ftruncate(const char *path, off64_t newSize, struct fuse_file_info *fileInfo) {
+  printf("ftruncate(path=%s, newSize=%ld)\n", path, newSize);
+  return db->ftruncate((file_info*)fileInfo->fh, newSize);
 }
 
 

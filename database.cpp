@@ -290,6 +290,7 @@ int DataBase::ftruncate(boost::intrusive_ptr<file_info> fi, off_t newSize)
     db.transactionRollback();
     throw e;
   }
+  fi->st.st_size = newSize;
   db.transactionCommit();
   return 0;
 }
@@ -345,7 +346,8 @@ std::vector<boost::intrusive_ptr<file_info> > DataBase::readdir(boost::intrusive
 
 shared_ptr<storage_block> DataBase::getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum)
 {
-  shared_ptr<storage_block> block = make_shared<storage_block>();
+  printf("getStorageBlock(f: %ld)\n", fileBlockNum);
+  shared_ptr<storage_block> block = make_shared<storage_block>(0);
   if (fileBlockNum * block_size() > finfo->st.st_size)
     return block;
 
@@ -361,15 +363,18 @@ shared_ptr<storage_block> DataBase::getStorageBlock(boost::intrusive_ptr<file_in
       if (stmt->next()) {
         item.empty = false;
         item.storageBlockNum = stmt->getInt64(0);
+        printf("found block: s: %ld\n", item.storageBlockNum);
         item.hash = make_shared<string>(stmt->getBlob(1));
         block->use_count = stmt->getInt(2);
       } else {
+        printf("not found block\n");
         item.empty = true;
         item.storageBlockNum = 0;
         block->use_count = 0;
       }
       item.loaded = true;
     }
+    printf("Found block in cache %ld\n", item.storageBlockNum);
     block->storageBlockNum = item.storageBlockNum;
     block->hash = item.hash;
   });
@@ -379,6 +384,7 @@ shared_ptr<storage_block> DataBase::getStorageBlock(boost::intrusive_ptr<file_in
 
 shared_ptr<storage_block> DataBase::allocateStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, shared_ptr<string> hash)
 {
+  printf("allocateStorageBlock(f: %ld)\n", fileBlockNum);
   db.transactionBegin(tr_exclusive);
   shared_ptr<storage_block> res = make_shared<storage_block>();
   try {
@@ -387,6 +393,7 @@ shared_ptr<storage_block> DataBase::allocateStorageBlock(boost::intrusive_ptr<fi
     if (stmt->next()) {
       //present = true;
       res->storageBlockNum = stmt->getInt64(0);
+      printf("found existing: s: %ld\n", res->storageBlockNum);
       res->use_count = stmt->getInt(1) + 1;
       res->hash = hash;
       res->loaded = false;
@@ -400,6 +407,7 @@ shared_ptr<storage_block> DataBase::allocateStorageBlock(boost::intrusive_ptr<fi
       stmt->bindBlob(1, *hash);
       stmt->executeUpdate();
       res->storageBlockNum = db.lastInsertId();
+      printf("allocated new: s: %ld\n", res->storageBlockNum);
       res->use_count = 1;
       res->hash = hash;
       res->loaded = false;
@@ -427,6 +435,7 @@ shared_ptr<storage_block> DataBase::allocateStorageBlock(boost::intrusive_ptr<fi
 
 void DataBase::releaseStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, shared_ptr<storage_block> block)
 {
+  printf("releaseStorageBlock(f: %ld, s: %ld)\n", fileBlockNum, block->storageBlockNum);
   db.transactionBegin(tr_exclusive);
   try {
     shared_ptr<PreparedStmt> stmt(db.prepareStmt("DELETE FROM file_blocks WHERE file_id = ? AND offset = ?"));

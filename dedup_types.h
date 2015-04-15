@@ -17,9 +17,11 @@
 #ifndef DEDUP_TYPES_H
 #define DEDUP_TYPES_H
 
+#include <iostream>
 #include <cds/gc/dhp.h>
 #include <cds/container/skip_list_set_dhp.h>
 #include <boost/filesystem.hpp>
+#include <fcntl.h>
 #include "MurmurHash3.h"
 
 #define HASH_SEED 0xad64fac3
@@ -52,12 +54,7 @@ struct storage_block {
     : storageBlockNum(other.storageBlockNum), use_count(other.use_count),
       hash(other.hash), data(other.data), dirty(other.dirty), loaded(other.loaded)
   {}
-  ~storage_block() { printf("~storage_block()\n"); }
-
-  bool operator < (const storage_block &other ) const
-    {
-      return storageBlockNum < other.storageBlockNum;
-    }
+  ~storage_block() { printf("~storage_block(%ld)\n", storageBlockNum); }
 
   void calc_hash()
     {
@@ -65,6 +62,12 @@ struct storage_block {
       MurmurHash3_x64_128(data.data(), block_size(), HASH_SEED, (void*)hash->c_str());
     }
 };
+
+struct storage_block_comparator{
+  int operator() (const shared_ptr<storage_block> &a, const shared_ptr<storage_block> &b);
+};
+
+ostream& operator << (ostream& stream, const storage_block & block);
 
 struct block_info {
   off64_t fileBlockNum;
@@ -98,19 +101,7 @@ struct file_info {
   ~file_info() { printf("~file_info(%s)\n", name.c_str()); }
 };
 
-static void intrusive_ptr_add_ref(file_info* p)
-{
-  printf("add_ref(file_info) [%d, %s]\n", p->refcount.load(), p->name.c_str());
-  ++p->refcount;
-}
-
-static void intrusive_ptr_release(file_info* p)
-{
-  printf("release(file_info) [%d, %s]\n", p->refcount.load(), p->name.c_str());
-  if (!--p->refcount) {
-    printf("delete file_info\n");
-    delete p;
-  }
-}
+void intrusive_ptr_add_ref(file_info* p);
+void intrusive_ptr_release(file_info* p);
 
 #endif // DEDUP_TYPES_H

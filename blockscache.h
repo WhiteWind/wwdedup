@@ -30,7 +30,10 @@ private:
   static BlocksCache *_instance;
   int _storage;
   DataBase *db;
-  cds::container::SkipListSet<cds::gc::DHP, shared_ptr<storage_block> > _blocks;
+  cds::container::SkipListSet<cds::gc::DHP, shared_ptr<storage_block>,
+      typename cds::container::skip_list::make_traits<
+          cds::opt::compare<storage_block_comparator> >::type
+    > _blocks;
   void run(const string *db_url);
   volatile int terminated;
   thread thr;

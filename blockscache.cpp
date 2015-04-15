@@ -27,6 +27,7 @@ void BlocksCache::run(const string *db_url)
       for (auto iter = _blocks.begin(); iter != _blocks.end(); ++iter) {
         shared_ptr<storage_block> block = *iter;
         unique_lock<mutex> guard(block->lock);
+//        cout << "Found block " << *block << endl;
         if (block->dirty) {
           printf("Writing block %lX (%x%x%x%x)\n", block->storageBlockNum,
                  block->data[0], block->data[1], block->data[2], block->data[3]);
@@ -81,19 +82,22 @@ BlocksCache::~BlocksCache()
 
 void BlocksCache::_writeBlock(boost::intrusive_ptr<file_info> finfo, vector<unsigned char> &data, off64_t fileBlockNum)
 {
+  printf("_writeBlock(%ld)\n", fileBlockNum);
   shared_ptr<string> hash = make_shared<string>(16, '\0');
   MurmurHash3_x64_128(data.data(), block_size(), HASH_SEED, (void*)hash->c_str());
   shared_ptr<storage_block> newBlock = db->allocateStorageBlock(finfo, fileBlockNum, hash);
   newBlock->data = move(data);
   _blocks.ensure(newBlock, [](bool bNew, shared_ptr<storage_block> &item, shared_ptr<storage_block> key){
     unique_lock<mutex> guard(item->lock);
+    if (bNew)
+      cout << "Storage block placed: " << *item << endl;
     if (bNew && item != key) {
       item->data = key->data;
       item->dirty = key->dirty;
       item->hash = key->hash;
       item->use_count = key->use_count;
     } else {
-      if (item->hash != key->hash) {
+      if (item->hash->compare(*key->hash)) {
         assert(item->use_count == 0);
         item->dirty = true;
         item->hash = key->hash;
@@ -172,9 +176,11 @@ void BlocksCache::_erase(boost::intrusive_ptr<file_info> finfo, off64_t size, of
 
 shared_ptr<storage_block> BlocksCache::_getBlock(boost::intrusive_ptr<file_info> finfo, off64_t blockNum)
 {
+  printf("_getBlock(%ld)\n", blockNum);
   string hash;
   //off64_t storageBlockNum ;
   shared_ptr<storage_block> block = db->getStorageBlock(finfo, blockNum);
+  cout << "DB returned: " << *block.get() << endl;
   if (!block->storageBlockNum) {
     //FIXME: no need to allocate zeroes
     block->data = vector<unsigned char> (block_size(), '\0');
@@ -187,6 +193,7 @@ shared_ptr<storage_block> BlocksCache::_getBlock(boost::intrusive_ptr<file_info>
     unique_lock<mutex> guard(item->lock);
     if (bNew && !item->loaded) {
       assert(key->use_count > 0);
+      cout << "Storage block placed: " << *item << endl;
       item->use_count = key->use_count;
       item->data = vector<unsigned char>(block_size(), '\0');
       lseek(_storage, item->storageBlockNum << block_size_bits, SEEK_SET);

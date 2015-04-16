@@ -55,16 +55,9 @@ bool Database::open(string filename)
   _result_open = sqlite3_open(filename.c_str(), &_db);
 
   if (isOpen())
-  {
-    PreparedStmt stmt(_db, "PRAGMA journal_mode=WAL");
-    while (true)
-      try {
-        stmt.executeUpdate();
-        return true;
-      } catch (DatabaseLockedException &e) {}
-  } else {
+    return true;
+   else
     _err_msg = sqlite3_errmsg(_db);
-  }
 
   THROW_EXCEPTION("Database::open: " + errMsg())
 

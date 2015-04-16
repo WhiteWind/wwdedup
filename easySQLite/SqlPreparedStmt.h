@@ -38,7 +38,6 @@ namespace sql
 
         void reset();
         bool next();
-        void executeUpdate();
 
         int getInt(int index);
         sqlite3_int64 getInt64(int index);
@@ -53,6 +52,8 @@ namespace sql
         void bindString(int index, const string v);
         void bindBlob(int index, const string v);
         void bindNull(int index);
+
+        void executeUpdate(bool retry = false);
     };
 
 }

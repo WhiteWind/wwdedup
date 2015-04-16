@@ -64,9 +64,12 @@ bool PreparedStmt::next()
     THROW_EXCEPTION("Error executing prepared statement: " + getError())
 }
 
-void PreparedStmt::executeUpdate()
+void PreparedStmt::executeUpdate(bool retry)
 {
-  int res = sqlite3_step(_stmt);
+  int res;
+  do {
+    res = sqlite3_step(_stmt);
+  } while (retry && ((res & 0xFF) == SQLITE_LOCKED || (res & 0xFF) == SQLITE_BUSY));
   if (res == SQLITE_DONE || res == SQLITE_ROW) {
     reset();
   } else if ((res & 0xFF) == SQLITE_LOCKED || (res & 0xFF) == SQLITE_BUSY)

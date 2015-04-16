@@ -22,8 +22,11 @@ void BlocksCache::run(const string *db_url)
 {
 //  cds::gc::DHP::thread_gc gc;
   cds::threading::Manager::attachThread();
+  unique_lock<mutex> lck(writerMutex);
   db = new DataBase(db_url);
   while (!terminated) {
+    writerFlag.wait_for(lck, chrono::seconds(1));
+    cout << "Writer woke up" << endl;
     try {
       for (auto iter = _blocks.begin(); iter != _blocks.end(); ++iter) {
         shared_ptr<storage_block> block = *iter;
@@ -37,7 +40,7 @@ void BlocksCache::run(const string *db_url)
           block->dirty = false;
         }
       }
-      this_thread::yield();
+      this_thread::sleep_for(chrono::milliseconds(1));
     } catch (exception &e) {
       REPORT_EXCEPTION(e)
     }
@@ -97,6 +100,7 @@ void BlocksCache::_writeBlock(boost::intrusive_ptr<file_info> finfo, vector<unsi
   printf("_writeBlock(%ld)\n", fblock->fileBlockNum);
   shared_ptr<string> hash = make_shared<string>(16, '\0');
   MurmurHash3_x64_128(data.data(), block_size(), HASH_SEED, (void*)hash->c_str());
+
   //switch
   //case present: find block, use_count++
   //case replaced: find block, move(data), dirty=true, use_count = 1, set hash
@@ -264,6 +268,8 @@ block_info *BlocksCache::_getLockedFileBlock(boost::intrusive_ptr<file_info> fin
 
 void BlocksCache::_sync()
 {
-
+  unique_lock<mutex> lck(writerMutex);
+  cout << "Sync" << endl;
+  writerFlag.notify_one();
 }
 

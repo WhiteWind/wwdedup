@@ -20,6 +20,8 @@
 #include <string>
 #include <exception>
 #include <system_error>
+#include <chrono>
+#include <condition_variable>
 #include "database.h"
 #include "dedup_types.h"
 
@@ -30,6 +32,8 @@ private:
   static BlocksCache *_instance;
   int _storage;
   DataBase *db;
+  std::mutex writerMutex;
+  std::condition_variable writerFlag;
   cds::container::SkipListSet<cds::gc::DHP, shared_ptr<storage_block>,
       typename cds::container::skip_list::make_traits<
           cds::opt::compare<storage_block_comparator> >::type

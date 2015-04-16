@@ -21,107 +21,74 @@
 using namespace sql;
 using namespace boost::filesystem;
 
-Field definition_blockHashes[] =
+void DataBase::prepareStatements()
 {
-    Field(FIELD_KEY),
-    Field("hash", type_blob, flag_not_null | flag_unique),
-    Field("use_count", type_int, flag_not_null),
-    Field(DEFINITION_END),
-};
+  stGetByPath.reset(db.prepareStmt("SELECT _ID, depth, size, mode, uid, gid, mtime, ctime, path FROM files WHERE path = ?"));
+  stGetFileBlock.reset(db.prepareStmt("SELECT h._ID, h.hash, h.use_count \
+                                  FROM file_blocks b LEFT JOIN block_hashes h ON b.hash = h.hash \
+                                  WHERE b.file_id = ? AND b.offset = ?"));
+  stDeleteFileBlock.reset(db.prepareStmt("DELETE FROM file_blocks WHERE file_id = ? AND offset = ?"));
+  stDecreaseUseCount.reset(db.prepareStmt("UPDATE block_hashes SET use_count = use_count - 1 WHERE hash = ?"));
+  stSelectBlockHash.reset(db.prepareStmt("SELECT _ID, use_count FROM block_hashes WHERE hash = ?"));
+  stIncreaseUseCount.reset(db.prepareStmt("UPDATE block_hashes SET use_count = use_count + 1 WHERE hash = ?"));
+  stSetUseCount.reset(db.prepareStmt("UPDATE block_hashes SET use_count = ? WHERE _ID = ?"));
+  stUpdateBlockHash.reset(db.prepareStmt("UPDATE block_hashes SET hash = ? WHERE _ID = ?"));
+  stInsertBlockHash.reset(db.prepareStmt("INSERT INTO block_hashes (hash, use_count) VALUES(?, 1)"));
+  stReplaceFileBlock.reset(db.prepareStmt("REPLACE INTO file_blocks (file_id, offset, hash) VALUES(?, ?, ?)"));
 
-Field definition_fileBlocks[] =
-{
-    Field(FIELD_KEY),
-    Field("file_id", type_int, flag_not_null),
-    Field("offset", type_int, flag_not_null),
-    Field("hash", type_blob, flag_not_null),
-    Field(DEFINITION_END),
-};
-
-Field definition_files[] =
-{
-    Field(FIELD_KEY),
-    Field("path", type_text, flag_not_null),
-    Field("depth", type_int, flag_not_null),
-    Field("size", type_int, flag_not_null),
-    Field("mode", type_int, flag_not_null),
-    Field("uid", type_int, flag_not_null),
-    Field("gid", type_int, flag_not_null),
-    Field("mtime", type_int, flag_not_null),
-    Field("ctime", type_int, flag_not_null),
-    Field("link_target", type_text),
-    Field(DEFINITION_END),
-};
+  //.reset(db.prepareStmt(
+  //.reset(db.prepareStmt(
+}
 
 DataBase::DataBase(const string *db_url)
 {
-    assert(db_url);
-    db.open(*db_url);
+  assert(db_url);
+  db.open(*db_url);
 
-    try {
-      //define table object
-      Table tbBlockHashes(db.getHandle(), "block_hashes", definition_blockHashes);
+  try {
+    shared_ptr<PreparedStmt> stmt(db.prepareStmt("PRAGMA journal_mode=WAL"));
+    stmt->executeUpdate(true);
 
-      //create new table
-      tbBlockHashes.create();
+    stmt.reset(db.prepareStmt("CREATE TABLE IF NOT EXISTS files ("
+                           "_ID INTEGER PRIMARY KEY, "
+                           "path TEXT NOT NULL, "
+                           "depth INTEGER NOT NULL, "
+                           "size INTEGER NOT NULL, "
+                           "mode INTEGER NOT NULL, "
+                           "uid INTEGER NOT NULL, "
+                           "gid INTEGER NOT NULL, "
+                           "mtime INTEGER NOT NULL, "
+                           "ctime INTEGER NOT NULL, "
+                           "link_target TEXT, "
+                           "CONSTRAINT path_uniq UNIQUE (path))"));
+    stmt->executeUpdate(true);
 
-      Table tbFileBlocks(db.getHandle(), "file_blocks", definition_fileBlocks);
+    stmt.reset(db.prepareStmt("CREATE TABLE IF NOT EXISTS file_blocks ("
+                                      "_ID INTEGER PRIMARY KEY, "
+                                      "file_id INTEGER NOT NULL ,"
+                                      "offset INTEGER NOT NULL, "
+                                      "hash BLOB NOT NULL, "
+                                      "CONSTRAINT offset_uniq UNIQUE (file_id, offset))"));
+    stmt->executeUpdate(true);
 
-      //create new table
-      tbFileBlocks.create();
+    stmt.reset(db.prepareStmt("CREATE TABLE IF NOT EXISTS block_hashes ("
+                                      "_ID INTEGER PRIMARY KEY, "
+                                      "hash BLOB, "
+                                      "use_count INTEGER NOT NULL)"));
+    stmt->executeUpdate(true);
 
-      Table tbFiles(db.getHandle(), "files", definition_files);
+    stmt.reset(db.prepareStmt("CREATE INDEX IF NOT EXISTS hash_idx ON block_hashes (hash)"));
+    stmt->executeUpdate(true);
 
-      //create new table
-      tbFiles.create();
-
-      create("/", S_IFDIR | 0755);
-    } catch (sql::Exception &e) {
-      printf("At DataBase::DataBase: %s", e.what());
-    }
-}
-
-void DataBase::test()
-{
-  Table tbBlockHashes(db.getHandle(), "block_hashes", definition_blockHashes);
-
-  tbBlockHashes.truncate();
-
-  //define new record
-  Record record(tbBlockHashes.fields());
-
-  //set record data
-  record.setString("hash", "123");
-  record.setInteger("_ID", 1);
-  record.setInteger("use_count", 1);
-
-  //add 10 records
-  //for (int index = 0; index < 10; index++)
-          tbBlockHashes.addRecord(&record);
-
-  record.setString("hash", "1234");
-  record.setInteger("_ID", 2);
-  tbBlockHashes.addRecord(&record);
-
-  //select record to update
-  if (Record* record = tbBlockHashes.getRecordByKeyId(2))
-  {
-          record->setString("hash", "Frank\x01yo\0\x02nigga");
-          record->setInteger("use_count", 2);
-
-          tbBlockHashes.updateRecord(record);
+  } catch (sql::Exception &e) {
+    printf("At DataBase::DataBase: %s", e.what());
   }
-
-  //load all records
-  tbBlockHashes.open();
-
-  //list loaded records
-  for (int index = 0; index < tbBlockHashes.recordCount(); index++)
-          if (Record* record = tbBlockHashes.getRecord(index))
-                  sql::log(record->toString());
-
-  sql::log("");
-  sql::log("ALL OK");
+  prepareStatements();
+  try {
+    create("/", S_IFDIR | 0755);
+  } catch (exception &e) {
+    printf("At DataBase::DataBase: %s", e.what());
+  }
 }
 
 DataBase::~DataBase()
@@ -133,23 +100,24 @@ boost::intrusive_ptr<file_info> DataBase::getByPath(const path filename)
 {
   boost::intrusive_ptr<file_info> res = new file_info();
   res->st.st_ino = 0;
-  shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT _ID, depth, size, mode, uid, gid, mtime, ctime, path FROM files WHERE path = ?"));
-  stmt->bindString(1, filename.string());
-  if (stmt->next()) {
+  //shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT _ID, depth, size, mode, uid, gid, mtime, ctime, path FROM files WHERE path = ?"));
+  stGetByPath->bindString(1, filename.string());
+  if (stGetByPath->next()) {
     res->name = filename;
-    res->st.st_ino = stmt->getInt64(0);
-    res->depth = stmt->getInt(1);
-    res->st.st_size = stmt->getInt64(2);
-    res->st.st_mode = stmt->getInt(3);
-    res->st.st_uid = stmt->getInt(4);
-    res->st.st_gid = stmt->getInt(5);
-    res->st.st_mtime = stmt->getInt(6);
-    res->st.st_ctime = stmt->getInt(7);
+    res->st.st_ino = stGetByPath->getInt64(0);
+    res->depth = stGetByPath->getInt(1);
+    res->st.st_size = stGetByPath->getInt64(2);
+    res->st.st_mode = stGetByPath->getInt(3);
+    res->st.st_uid = stGetByPath->getInt(4);
+    res->st.st_gid = stGetByPath->getInt(5);
+    res->st.st_mtime = stGetByPath->getInt(6);
+    res->st.st_ctime = stGetByPath->getInt(7);
     //printf("Got record: %s, %d, %d, %d %o\n", stmt->getString(8).c_str(), (int)res.st.st_ino, res.depth, (int)res.st.st_size, (int)res.st.st_mode);
   } else {
     res->st.st_ino = 0;
     res->st.st_size = 0;
   }
+  stGetByPath->reset();
   return res;
 }
 
@@ -444,30 +412,30 @@ bool DataBase::replaceStorageBlock(boost::intrusive_ptr<file_info> finfo, block_
   }
   try {
     fblock->hash = hash;
-    shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT _ID, use_count FROM block_hashes WHERE hash = ?"));
-    stmt->bindBlob(1, *hash);
-    if (stmt->next()) {
+    //shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT _ID, use_count FROM block_hashes WHERE hash = ?"));
+    stSelectBlockHash->bindBlob(1, *hash);
+    if (stSelectBlockHash->next()) {
       present = true;
-      fblock->storageBlockNum = stmt->getInt64(0);
+      fblock->storageBlockNum = stSelectBlockHash->getInt64(0);
       fblock->storageBlock.reset();
       printf("found existing: s: %ld\n", fblock->storageBlockNum);
-      stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = use_count + 1 WHERE hash = ?"));
-      stmt->bindBlob(1, *hash);
-      stmt->executeUpdate();
+      //stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = use_count + 1 WHERE hash = ?"));
+      stIncreaseUseCount->bindBlob(1, *hash);
+      stIncreaseUseCount->executeUpdate();
       if (sblock)
         sblock->use_count--;
     } else {
       //present = false;
       if (sblock && sblock->use_count == 1) {
-        stmt.reset(db.prepareStmt("UPDATE block_hashes SET hash = ? WHERE _ID = ?"));
-        stmt->bindBlob(1, *hash);
-        stmt->bindInt64(2, sblock->storageBlockNum);
-        stmt->executeUpdate();
+        //stmt.reset(db.prepareStmt("UPDATE block_hashes SET hash = ? WHERE _ID = ?"));
+        stUpdateBlockHash->bindBlob(1, *hash);
+        stUpdateBlockHash->bindInt64(2, sblock->storageBlockNum);
+        stUpdateBlockHash->executeUpdate();
         cout << "modified hash inplace: " << sblock->storageBlockNum << endl;
       } else {
-        stmt.reset(db.prepareStmt("INSERT INTO block_hashes (hash, use_count) VALUES(?, 1)"));
-        stmt->bindBlob(1, *hash);
-        stmt->executeUpdate();
+        //stmt.reset(db.prepareStmt("INSERT INTO block_hashes (hash, use_count) VALUES(?, 1)"));
+        stInsertBlockHash->bindBlob(1, *hash);
+        stInsertBlockHash->executeUpdate();
         fblock->storageBlockNum = db.lastInsertId();
         fblock->storageBlock.reset();
         if (sblock)
@@ -475,24 +443,26 @@ bool DataBase::replaceStorageBlock(boost::intrusive_ptr<file_info> finfo, block_
         printf("allocated new: s: %ld\n", fblock->storageBlockNum);
       }
     }
-    stmt.reset(db.prepareStmt("REPLACE INTO file_blocks (file_id, offset, hash) VALUES(?, ?, ?)"));
-    stmt->bindInt64(1, finfo->st.st_ino);
-    stmt->bindInt64(2, fblock->fileBlockNum);
-    stmt->bindBlob(3, *hash);
-    stmt->executeUpdate();
+    //stmt.reset(db.prepareStmt("REPLACE INTO file_blocks (file_id, offset, hash) VALUES(?, ?, ?)"));
+    stReplaceFileBlock->bindInt64(1, finfo->st.st_ino);
+    stReplaceFileBlock->bindInt64(2, fblock->fileBlockNum);
+    stReplaceFileBlock->bindBlob(3, *hash);
+    stReplaceFileBlock->executeUpdate();
     if (sblock) {
-      stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = ? WHERE _ID = ?"));
-      stmt->bindInt(1, sblock->use_count);
-      stmt->bindInt64(2, sblock->storageBlockNum);
-      stmt->executeUpdate();
+      //stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = ? WHERE _ID = ?"));
+      stSetUseCount->bindInt(1, sblock->use_count);
+      stSetUseCount->bindInt64(2, sblock->storageBlockNum);
+      stSetUseCount->executeUpdate();
     }
     db.transactionCommit();
 
     if (sblock)
       sblock->lock.unlock();
 
+    stSelectBlockHash->reset();
     return present;
   } catch (exception &e) {
+    stSelectBlockHash->reset();
     if (sblock)
       sblock->lock.unlock();
     db.transactionRollback();
@@ -505,14 +475,14 @@ void DataBase::releaseStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_
   printf("releaseStorageBlock(f: %ld, s: %ld)\n", fileBlockNum, block->storageBlockNum);
   db.transactionBegin(tr_exclusive);
   try {
-    shared_ptr<PreparedStmt> stmt(db.prepareStmt("DELETE FROM file_blocks WHERE file_id = ? AND offset = ?"));
-    stmt->bindInt64(1, finfo->st.st_ino);
-    stmt->bindInt64(2, fileBlockNum);
-    stmt->executeUpdate();
+    //shared_ptr<PreparedStmt> stmt(db.prepareStmt("DELETE FROM file_blocks WHERE file_id = ? AND offset = ?"));
+    stDeleteFileBlock->bindInt64(1, finfo->st.st_ino);
+    stDeleteFileBlock->bindInt64(2, fileBlockNum);
+    stDeleteFileBlock->executeUpdate();
 
-    stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = use_count - 1 WHERE hash = ?"));
-    stmt->bindBlob(1, *(block->hash));
-    stmt->executeUpdate();
+    //stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = use_count - 1 WHERE hash = ?"));
+    stDecreaseUseCount->bindBlob(1, *(block->hash));
+    stDecreaseUseCount->executeUpdate();
     db.transactionCommit();
     block->use_count--;
     finfo->blocks.find(fileBlockNum, [](block_info &item, off64_t key) {
@@ -539,18 +509,19 @@ void DataBase::loadFileBlock(boost::intrusive_ptr<file_info> finfo, block_info &
     return;
   }
 
-  shared_ptr<PreparedStmt> stmt(db.prepareStmt(
-        "SELECT h._ID, h.hash, h.use_count \
-        FROM file_blocks b LEFT JOIN block_hashes h ON b.hash = h.hash \
-        WHERE b.file_id = ? AND b.offset = ?"));
-  stmt->bindInt64(1, finfo->st.st_ino);
-  stmt->bindInt64(2, block.fileBlockNum);
+/*  shared_ptr<PreparedStmt> stmt(db.prepareStmt(
+        "SELECT h._ID, h.hash, h.use_count
+        FROM file_blocks b LEFT JOIN block_hashes h ON b.hash = h.hash
+        WHERE b.file_id = ? AND b.offset = ?")); */
 
-  if (stmt->next()) {
+  stGetFileBlock->bindInt64(1, finfo->st.st_ino);
+  stGetFileBlock->bindInt64(2, block.fileBlockNum);
+
+  if (stGetFileBlock->next()) {
     block.empty = false;
-    block.storageBlockNum = stmt->getInt64(0);
-    block.hash = make_shared<string>(stmt->getBlob(1));
-    use_count = stmt->getInt(2);
+    block.storageBlockNum = stGetFileBlock->getInt64(0);
+    block.hash = make_shared<string>(stGetFileBlock->getBlob(1));
+    use_count = stGetFileBlock->getInt(2);
     printf("Found block: s: %ld\n", block.storageBlockNum);
   } else {
     block.empty = true;
@@ -558,6 +529,7 @@ void DataBase::loadFileBlock(boost::intrusive_ptr<file_info> finfo, block_info &
     use_count = 0;
     printf("not found block\n");
   }
+  stGetFileBlock->reset();
 }
 
 

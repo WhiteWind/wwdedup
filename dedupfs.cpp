@@ -196,12 +196,14 @@ int DedupFS::Statfs(const char *path, struct statvfs *statInfo) {
 int DedupFS::Flush(const char *path, struct fuse_file_info *fileInfo) {
   printf("flush(path=%s)\n", path);
 //	//noop because we don't maintain our own buffers
+  BlocksCache::sync();
   return 0;
 }
 
 int DedupFS::Release(const char *path, struct fuse_file_info *fileInfo) {
   printf("release(path=%s)\n", path);
   intrusive_ptr_release((file_info*)fileInfo->fh);
+  BlocksCache::sync();
   return 0;
 }
 
@@ -214,6 +216,7 @@ int DedupFS::Fsync(const char *path, int datasync, struct fuse_file_info *fi) {
 //		//sync data + file metadata
 //		return RETURN_ERRNO(fsync(fi->fh));
 //	}
+  BlocksCache::sync();
   return 0;
 }
 

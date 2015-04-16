@@ -49,10 +49,22 @@ class DataBase
 {
 private:
     sql::Database db;
+    shared_ptr<sql::PreparedStmt> stGetByPath;
+    shared_ptr<sql::PreparedStmt> stGetFileBlock;
+    shared_ptr<sql::PreparedStmt> stDeleteFileBlock;
+    shared_ptr<sql::PreparedStmt> stDecreaseUseCount;
+    shared_ptr<sql::PreparedStmt> stSelectBlockHash;
+    shared_ptr<sql::PreparedStmt> stIncreaseUseCount;
+    shared_ptr<sql::PreparedStmt> stSetUseCount;
+    shared_ptr<sql::PreparedStmt> stUpdateBlockHash;
+    shared_ptr<sql::PreparedStmt> stInsertBlockHash;
+    shared_ptr<sql::PreparedStmt> stReplaceFileBlock;
+    //shared_ptr<sql::PreparedStmt>
+    //shared_ptr<sql::PreparedStmt>
+    void prepareStatements();
 public:
     DataBase(const std::string* db_url);
     ~DataBase();
-    void test();
 
     boost::intrusive_ptr<file_info> getByPath(const boost::filesystem::path filename);
     int rename(const boost::filesystem::path oldPath, const boost::filesystem::path newPath);

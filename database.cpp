@@ -459,7 +459,7 @@ bool DataBase::replaceStorageBlock(boost::intrusive_ptr<file_info> finfo, block_
     } else {
       //present = false;
       if (sblock && sblock->use_count == 1) {
-        stmt.reset(db.prepareStmt("UDPATE block_hashes SET hash = ? WHERE _ID = ?"));
+        stmt.reset(db.prepareStmt("UPDATE block_hashes SET hash = ? WHERE _ID = ?"));
         stmt->bindBlob(1, *hash);
         stmt->bindInt64(2, sblock->storageBlockNum);
         stmt->executeUpdate();
@@ -481,7 +481,7 @@ bool DataBase::replaceStorageBlock(boost::intrusive_ptr<file_info> finfo, block_
     stmt->bindBlob(3, *hash);
     stmt->executeUpdate();
     if (sblock) {
-      stmt.reset(db.prepareStmt("UDPATE block_hashes SET use_count = ? WHERE _ID = ?"));
+      stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = ? WHERE _ID = ?"));
       stmt->bindInt(1, sblock->use_count);
       stmt->bindInt64(2, sblock->storageBlockNum);
       stmt->executeUpdate();

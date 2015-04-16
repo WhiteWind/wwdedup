@@ -20,7 +20,8 @@ BlocksCache *BlocksCache::_instance = nullptr;
 
 void BlocksCache::run(const string *db_url)
 {
-  cds::gc::DHP::thread_gc gc;
+//  cds::gc::DHP::thread_gc gc;
+  cds::threading::Manager::attachThread();
   db = new DataBase(db_url);
   while (!terminated) {
     try {
@@ -42,6 +43,7 @@ void BlocksCache::run(const string *db_url)
     }
   }
   delete db;
+  cds::threading::Manager::detachThread();
 }
 
 BlocksCache::BlocksCache(const string *db_url)

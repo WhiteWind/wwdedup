@@ -76,13 +76,15 @@ struct block_info {
   mutex lock;
   bool loaded;
   bool empty;
+  weak_ptr<storage_block> storageBlock;
 
   block_info(off64_t _fileBlockNum)
-    : fileBlockNum(_fileBlockNum), storageBlockNum(0), hash(), loaded(false), empty(true) {}
+    : fileBlockNum(_fileBlockNum), storageBlockNum(0), hash(), loaded(false), empty(true), storageBlock() {}
   block_info(off64_t _fileBlockNum, off64_t _storageBlockNum, string _hash)
-    : fileBlockNum(_fileBlockNum), storageBlockNum(_storageBlockNum), hash(make_shared<string>(_hash)), loaded(true), empty(false) {}
+    : fileBlockNum(_fileBlockNum), storageBlockNum(_storageBlockNum), hash(make_shared<string>(_hash)),
+      loaded(true), empty(false), storageBlock() {}
   block_info(off64_t _fileBlockNum, bool _empty)
-    : fileBlockNum(_fileBlockNum), storageBlockNum(0), hash(), loaded(true), empty(_empty) {}
+    : fileBlockNum(_fileBlockNum), storageBlockNum(0), hash(), loaded(true), empty(_empty), storageBlock() {}
 
   bool operator < (const block_info &other) const
     {

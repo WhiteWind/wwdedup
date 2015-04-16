@@ -44,7 +44,10 @@ private:
   void _erase(boost::intrusive_ptr<file_info> finfo, off64_t size, off64_t offset);
   void _sync();
 
-  shared_ptr<storage_block> _getBlock(boost::intrusive_ptr<file_info> finfo, off64_t blockNum);
+  shared_ptr<storage_block> _getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t blockNum);
+  block_info *_getLockedFileBlock(boost::intrusive_ptr<file_info> finfo, off64_t blockNum);
+  void _writeBlock(boost::intrusive_ptr<file_info> finfo, vector<unsigned char> &data, block_info *fblock);
+  void _populateStorageBlock(shared_ptr<storage_block> block);
 public:
   static void start(const string *db_url) { if (!_instance) _instance = new BlocksCache(db_url); }
   static void stop() { delete _instance; _instance = nullptr; }
@@ -56,7 +59,7 @@ public:
   static void erase(boost::intrusive_ptr<file_info> finfo, off64_t size, off64_t offset)
       { _instance->_erase(finfo, size, offset); }
   static void sync() { _instance->_sync(); }
-  void _writeBlock(boost::intrusive_ptr<file_info> finfo, vector<unsigned char> &data, off64_t fileBlockNum);
+  void _writeBlockWrapper(boost::intrusive_ptr<file_info> finfo, const char *curPtr, off64_t curBlockNum, int chunkSize, int startOffset = 0);
 };
 
 #endif // BLOCKSCACHE_H

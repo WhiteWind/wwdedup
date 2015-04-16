@@ -433,6 +433,73 @@ shared_ptr<storage_block> DataBase::allocateStorageBlock(boost::intrusive_ptr<fi
   }
 }
 
+bool DataBase::replaceStorageBlock(boost::intrusive_ptr<file_info> finfo, block_info *fblock, shared_ptr<string> hash)
+{
+  bool present = false;
+  printf("replaceStorageBlock(f: %ld)\n", fblock->fileBlockNum);
+  db.transactionBegin(tr_exclusive);
+  shared_ptr<storage_block> sblock = fblock->storageBlock.lock();
+  if (sblock) {
+    sblock->lock.lock();
+  }
+  try {
+    fblock->hash = hash;
+    shared_ptr<PreparedStmt> stmt(db.prepareStmt("SELECT _ID, use_count FROM block_hashes WHERE hash = ?"));
+    stmt->bindBlob(1, *hash);
+    if (stmt->next()) {
+      present = true;
+      fblock->storageBlockNum = stmt->getInt64(0);
+      fblock->storageBlock.reset();
+      printf("found existing: s: %ld\n", fblock->storageBlockNum);
+      stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = use_count + 1 WHERE hash = ?"));
+      stmt->bindBlob(1, *hash);
+      stmt->executeUpdate();
+      if (sblock)
+        sblock->use_count--;
+    } else {
+      //present = false;
+      if (sblock && sblock->use_count == 1) {
+        stmt.reset(db.prepareStmt("UDPATE block_hashes SET hash = ? WHERE _ID = ?"));
+        stmt->bindBlob(1, *hash);
+        stmt->bindInt64(2, sblock->storageBlockNum);
+        stmt->executeUpdate();
+        cout << "modified hash inplace: " << sblock->storageBlockNum << endl;
+      } else {
+        stmt.reset(db.prepareStmt("INSERT INTO block_hashes (hash, use_count) VALUES(?, 1)"));
+        stmt->bindBlob(1, *hash);
+        stmt->executeUpdate();
+        fblock->storageBlockNum = db.lastInsertId();
+        fblock->storageBlock.reset();
+        if (sblock)
+          sblock->use_count--;
+        printf("allocated new: s: %ld\n", fblock->storageBlockNum);
+      }
+    }
+    stmt.reset(db.prepareStmt("REPLACE INTO file_blocks (file_id, offset, hash) VALUES(?, ?, ?)"));
+    stmt->bindInt64(1, finfo->st.st_ino);
+    stmt->bindInt64(2, fblock->fileBlockNum);
+    stmt->bindBlob(3, *hash);
+    stmt->executeUpdate();
+    if (sblock) {
+      stmt.reset(db.prepareStmt("UDPATE block_hashes SET use_count = ? WHERE _ID = ?"));
+      stmt->bindInt(1, sblock->use_count);
+      stmt->bindInt64(2, sblock->storageBlockNum);
+      stmt->executeUpdate();
+    }
+    db.transactionCommit();
+
+    if (sblock)
+      sblock->lock.unlock();
+
+    return present;
+  } catch (exception &e) {
+    if (sblock)
+      sblock->lock.unlock();
+    db.transactionRollback();
+    throw e;
+  }
+}
+
 void DataBase::releaseStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, shared_ptr<storage_block> block)
 {
   printf("releaseStorageBlock(f: %ld, s: %ld)\n", fileBlockNum, block->storageBlockNum);
@@ -457,6 +524,39 @@ void DataBase::releaseStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_
   } catch (exception &e) {
     db.transactionRollback();
     throw e;
+  }
+}
+
+void DataBase::loadFileBlock(boost::intrusive_ptr<file_info> finfo, block_info &block, int &use_count)
+{
+  printf("loadFileBlock(f: %ld)\n", block.fileBlockNum);
+
+  if (block.fileBlockNum * block_size() > finfo->st.st_size) {
+    block.empty = true;
+    block.storageBlockNum = 0;
+    use_count = 0;
+    printf("Block is not allocated\n");
+    return;
+  }
+
+  shared_ptr<PreparedStmt> stmt(db.prepareStmt(
+        "SELECT h._ID, h.hash, h.use_count \
+        FROM file_blocks b LEFT JOIN block_hashes h ON b.hash = h.hash \
+        WHERE b.file_id = ? AND b.offset = ?"));
+  stmt->bindInt64(1, finfo->st.st_ino);
+  stmt->bindInt64(2, block.fileBlockNum);
+
+  if (stmt->next()) {
+    block.empty = false;
+    block.storageBlockNum = stmt->getInt64(0);
+    block.hash = make_shared<string>(stmt->getBlob(1));
+    use_count = stmt->getInt(2);
+    printf("Found block: s: %ld\n", block.storageBlockNum);
+  } else {
+    block.empty = true;
+    block.storageBlockNum = 0;
+    use_count = 0;
+    printf("not found block\n");
   }
 }
 

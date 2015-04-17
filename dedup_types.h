@@ -44,23 +44,26 @@ struct storage_block {
   vector<unsigned char> data;
   bool dirty;
   bool loaded;
+  time_t atime;
 
-  storage_block() :storageBlockNum(0), use_count(0), hash(), data(), dirty(false), loaded(false)
+  storage_block() :storageBlockNum(0), use_count(0), hash(), data(), dirty(false), loaded(false), atime(time(nullptr))
     { printf("storage_block()\n"); }
   storage_block(off64_t num)
-    : storageBlockNum(num), use_count(0), hash(), data(), dirty(false), loaded(false)
+    : storageBlockNum(num), use_count(0), hash(), data(), dirty(false), loaded(false), atime(time(nullptr))
     { printf("storage_block(%ld)\n", num); }
   storage_block(const storage_block &other)
     : storageBlockNum(other.storageBlockNum), use_count(other.use_count),
-      hash(other.hash), data(other.data), dirty(other.dirty), loaded(other.loaded)
+      hash(other.hash), data(other.data), dirty(other.dirty), loaded(other.loaded), atime(time(nullptr))
   {}
   ~storage_block() { printf("~storage_block(%ld)\n", storageBlockNum); }
 
-  void calc_hash()
-    {
-      hash = make_shared<string>(128, 0);
-      MurmurHash3_x64_128(data.data(), block_size(), HASH_SEED, (void*)hash->c_str());
-    }
+//  void calc_hash()
+//    {
+//      hash = make_shared<string>(128, 0);
+//      MurmurHash3_x64_128(data.data(), block_size(), HASH_SEED, (void*)hash->c_str());
+//    }
+
+  void access() { atime = time(nullptr); }
 };
 
 struct storage_block_comparator{

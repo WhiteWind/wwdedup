@@ -34,9 +34,12 @@ private:
   DataBase *db;
   std::mutex writerMutex;
   std::condition_variable writerFlag;
+  std::atomic_bool writeTriggered;
   cds::container::SkipListSet<cds::gc::DHP, shared_ptr<storage_block>,
       typename cds::container::skip_list::make_traits<
-          cds::opt::compare<storage_block_comparator> >::type
+          cds::opt::compare<storage_block_comparator>,
+          cds::opt::item_counter<cds::atomicity::item_counter>
+  >::type
     > _blocks;
   void run(const string *db_url);
   volatile int terminated;

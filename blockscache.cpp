@@ -24,21 +24,51 @@ void BlocksCache::run(const string *db_url)
   cds::threading::Manager::attachThread();
   unique_lock<mutex> lck(writerMutex);
   db = new DataBase(db_url);
+  time_t mintime;
+  bool repeat = false;
   while (!terminated) {
-    writerFlag.wait_for(lck, chrono::seconds(1));
-    cout << "Writer woke up" << endl;
+    if (!repeat) {
+      writerFlag.wait_for(lck, chrono::seconds(5), [this] {return !!writeTriggered;});
+      writeTriggered = false;
+    }
+    repeat = false;
+    //cout << "Writer woke up" << endl;
+    mintime = time(nullptr);
     try {
       for (auto iter = _blocks.begin(); iter != _blocks.end(); ++iter) {
         shared_ptr<storage_block> block = *iter;
         unique_lock<mutex> guard(block->lock);
+        mintime = min(mintime, block->atime);
 //        cout << "Found block " << *block << endl;
         if (block->dirty) {
           printf("Writing block %lX (%x%x%x%x)\n", block->storageBlockNum,
                  block->data[0], block->data[1], block->data[2], block->data[3]);
-          lseek(_storage, block->storageBlockNum << block_size_bits, SEEK_SET);
-          write(_storage, block->data.data(), block_size());
+          pwrite(_storage, block->data.data(), block_size(), block->storageBlockNum << block_size_bits);
           block->dirty = false;
         }
+      }
+      cout << "Cached blocks count: " << _blocks.size() << endl;
+      if (_blocks.size() > 500) {
+        vector<shared_ptr<storage_block> > toDelete;
+        for (auto iter = _blocks.begin(); iter != _blocks.end(); ++iter) {
+          if (toDelete.size() > 63)
+            break;
+          shared_ptr<storage_block> block = *iter;
+          if (block->atime < mintime+10) {
+            unique_lock<mutex> guard(block->lock);
+            if (block->dirty) {
+              pwrite(_storage, block->data.data(), block_size(), block->storageBlockNum << block_size_bits);
+              block->dirty = false;
+            }
+            toDelete.push_back(block);
+          }
+        }
+        for (auto iter : toDelete) {
+          cout << "Releasing storage block " << *iter << endl;
+          _blocks.erase(iter);
+        }
+        if (_blocks.size() > 500)
+          repeat = true;
       }
       this_thread::sleep_for(chrono::milliseconds(1));
     } catch (exception &e) {
@@ -52,6 +82,7 @@ void BlocksCache::run(const string *db_url)
 BlocksCache::BlocksCache(const string *db_url)
   : terminated(false)
 {
+  writeTriggered = false;
   boost::filesystem::path storagepath = boost::filesystem::path(*db_url).branch_path();
   storagepath /= "storage.blk";
   _storage = open(storagepath.c_str(), O_CREAT | O_DSYNC | O_RDWR, 0644);
@@ -132,6 +163,7 @@ void BlocksCache::_writeBlockWrapper(boost::intrusive_ptr<file_info> finfo, cons
   shared_ptr<storage_block> firstBlock = fileBlock->storageBlock.lock();
   if (firstBlock) {
     unique_lock<mutex> guard(firstBlock->lock);
+    firstBlock->access();
     if (firstBlock->storageBlockNum) {
       if (chunkSize < block_size()) {
         _populateStorageBlock(firstBlock);
@@ -223,8 +255,10 @@ shared_ptr<storage_block> BlocksCache::_getStorageBlock(boost::intrusive_ptr<fil
   fblock->lock.unlock();
   if (!res)
     return make_shared<storage_block>();
-  else
+  else {
+    res->access();
     return res;
+  }
 }
 
 block_info *BlocksCache::_getLockedFileBlock(boost::intrusive_ptr<file_info> finfo, off64_t blockNum)
@@ -270,6 +304,7 @@ void BlocksCache::_sync()
 {
   unique_lock<mutex> lck(writerMutex);
   cout << "Sync" << endl;
+  writeTriggered = true;
   writerFlag.notify_one();
 }
 

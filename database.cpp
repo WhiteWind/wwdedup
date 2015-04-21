@@ -21,6 +21,8 @@
 using namespace sql;
 using namespace boost::filesystem;
 
+std::once_flag init_flag;
+
 void DataBase::prepareStatements()
 {
   stGetByPath.reset(db.prepareStmt("SELECT _ID, depth, size, mode, uid, gid, mtime, ctime, path FROM files WHERE path = ?"));
@@ -45,7 +47,13 @@ DataBase::DataBase(const string *db_url)
   assert(db_url);
   db.open(*db_url);
 
+  std::call_once(init_flag, &DataBase::init, this);
   prepareStatements();
+  try {
+    create("/", S_IFDIR | 0755);
+  } catch (exception &e) {
+    printf("At DataBase::DataBase: %s", e.what());
+  }
 }
 
 void DataBase::init()
@@ -86,11 +94,6 @@ void DataBase::init()
     stmt->executeUpdate(true);
 
   } catch (sql::Exception &e) {
-    printf("At DataBase::DataBase: %s", e.what());
-  }
-  try {
-    create("/", S_IFDIR | 0755);
-  } catch (exception &e) {
     printf("At DataBase::DataBase: %s", e.what());
   }
 }

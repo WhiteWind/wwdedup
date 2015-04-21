@@ -42,6 +42,7 @@ class DedupFS {
 private: 
 
   DataBase *db;
+  BlocksCache *bc;
 
 public:
   static DedupFS *Instance();

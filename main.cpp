@@ -98,6 +98,10 @@ int main(int argc, char *argv[]) {
     }
     argc--;
 
+    {
+      DataBase db(&dbUrl);
+    }
+
     BlocksCache::start(&dbUrl);
 
     fuse_stat = fuse_main(argc, argv, &examplefs_oper, &dbUrl);

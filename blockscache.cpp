@@ -16,14 +16,13 @@
 */
 #include "blockscache.h"
 
-BlocksCache *BlocksCache::_instance = nullptr;
+static boost::thread_specific_ptr<BlocksCache> _instance;
 
 void BlocksCache::run(const string *db_url)
 {
 //  cds::gc::DHP::thread_gc gc;
   cds::threading::Manager::attachThread();
   unique_lock<mutex> lck(writerMutex);
-  db = new DataBase(db_url);
   time_t mintime;
   bool repeat = false;
   while (!terminated) {
@@ -75,12 +74,11 @@ void BlocksCache::run(const string *db_url)
       REPORT_EXCEPTION(e)
     }
   }
-  delete db;
   cds::threading::Manager::detachThread();
 }
 
 BlocksCache::BlocksCache(const string *db_url)
-  : terminated(false)
+  : db(nullptr), terminated(false)
 {
   writeTriggered = false;
   boost::filesystem::path storagepath = boost::filesystem::path(*db_url).branch_path();
@@ -124,6 +122,25 @@ void BlocksCache::_populateStorageBlock(shared_ptr<storage_block> block)
   lseek(_storage, block->storageBlockNum << block_size_bits, SEEK_SET);
   if (read(_storage, block->data.data(), block_size()) != block_size())
     throw system_error(errno, system_category(), "Error reading block from storage");
+}
+
+void BlocksCache::start(const string *db_url) {
+  if (!_instance.get())
+    _instance.reset(new BlocksCache(db_url));
+}
+
+void BlocksCache::stop()
+{
+  _instance.reset();
+}
+
+BlocksCache *BlocksCache::getThreadInstance(DataBase *_db)
+{
+  if (!_instance.get())
+    _instance.reset(new BlocksCache(_db));
+  if (!_instance->db)
+    _instance->db = _db;
+  return _instance.get();
 }
 
 void BlocksCache::_writeBlock(boost::intrusive_ptr<file_info> finfo, vector<unsigned char> &data, block_info* fblock)
@@ -180,7 +197,7 @@ void BlocksCache::_writeBlockWrapper(boost::intrusive_ptr<file_info> finfo, cons
   fileBlock->lock.unlock();
 }
 
-off64_t BlocksCache::_write(boost::intrusive_ptr<file_info> finfo, const char *buf, off64_t size, off64_t offset)
+off64_t BlocksCache::writeBuf(boost::intrusive_ptr<file_info> finfo, const char *buf, off64_t size, off64_t offset)
 {
   if (size + offset > finfo->st.st_size)
     db->ftruncate(finfo, size+offset);
@@ -203,7 +220,7 @@ off64_t BlocksCache::_write(boost::intrusive_ptr<file_info> finfo, const char *b
   return factSize;
 }
 
-off64_t BlocksCache::_read(boost::intrusive_ptr<file_info> finfo, char *buf, off64_t size, off64_t offset)
+off64_t BlocksCache::readBuf(boost::intrusive_ptr<file_info> finfo, char *buf, off64_t size, off64_t offset)
 {
   if (size + offset > finfo->st.st_size)
     size = finfo->st.st_size - offset;
@@ -239,13 +256,12 @@ off64_t BlocksCache::_read(boost::intrusive_ptr<file_info> finfo, char *buf, off
   return factSize;
 }
 
-int BlocksCache::_truncate(boost::intrusive_ptr<file_info> finfo, off64_t newSize)
+int BlocksCache::truncate(boost::intrusive_ptr<file_info> finfo, off64_t newSize)
 {
   if (newSize < 0)
     return -EINVAL;
   if (finfo->st.st_size <= newSize) {
-    finfo->st.st_size = newSize;
-    return 0;
+    return db->ftruncate(finfo, newSize);
   }
   off64_t startBlock = newSize ? ((newSize - 1) >> block_size_bits) + 1 : 0;
   off64_t endBlock = finfo->st.st_size ? ((finfo->st.st_size - 1) >> block_size_bits) + 1 : 1;
@@ -263,8 +279,7 @@ int BlocksCache::_truncate(boost::intrusive_ptr<file_info> finfo, off64_t newSiz
       throw e;
     }
   }
-  finfo->st.st_size = newSize;
-  return 0;
+  return db->ftruncate(finfo, newSize);
 }
 
 shared_ptr<storage_block> BlocksCache::_getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t blockNum)
@@ -323,11 +338,10 @@ block_info *BlocksCache::_getLockedFileBlock(boost::intrusive_ptr<file_info> fin
   return fblock;
 }
 
-void BlocksCache::_sync()
+void BlocksCache::sync()
 {
   unique_lock<mutex> lck(writerMutex);
   cout << "Sync" << endl;
   writeTriggered = true;
   writerFlag.notify_one();
 }
-

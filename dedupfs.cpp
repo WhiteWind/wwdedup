@@ -36,6 +36,7 @@ DedupFS* DedupFS::Instance() {
 DedupFS::DedupFS() {
   printf("%lX/%d: DedupFS::DedupFS()\n", pthread_self(), ++th_count);
   db = new DataBase(static_cast<std::string*>(fuse_get_context()->private_data));
+  bc = BlocksCache::getThreadInstance(db);
 }
 
 DedupFS::~DedupFS() {
@@ -85,7 +86,7 @@ int DedupFS::Unlink(const char *path) {
     return -ENOENT;
   if (S_ISDIR(fi->st.st_mode))
     return -EISDIR;
-  int res = BlocksCache::truncate(fi, 0);
+  int res = bc->truncate(fi, 0);
   if (res != 0)
     return res;
   return db->remove(path);
@@ -147,7 +148,7 @@ int DedupFS::Truncate(const char *path, off_t newSize) {
     return -ENOENT;
   if (!S_ISREG(fi->st.st_mode))
     return -EINVAL;
-  return BlocksCache::truncate(fi, newSize);
+  return bc->truncate(fi, newSize);
 }
 
 int DedupFS::Utime(const char *path, struct utimbuf *ubuf) {
@@ -184,13 +185,13 @@ int DedupFS::Create(const char *path, mode_t mode, struct fuse_file_info *fileIn
 
 int DedupFS::Read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
   printf("read(path=%s, size=%d, offset=%d)\n", path, (int)size, (int)offset);
-  return BlocksCache::readBuf((file_info*)fileInfo->fh, buf, size, offset);
+  return bc->readBuf((file_info*)fileInfo->fh, buf, size, offset);
   //return -ENOSYS;
 }
 
 int DedupFS::Write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
   printf("write(path=%s, size=%d, offset=%d)\n", path, (int)size, (int)offset);
-  return BlocksCache::writeBuf((file_info*)fileInfo->fh, buf, size, offset);
+  return bc->writeBuf((file_info*)fileInfo->fh, buf, size, offset);
 }
 
 int DedupFS::Statfs(const char *path, struct statvfs *statInfo) {
@@ -204,14 +205,15 @@ int DedupFS::Statfs(const char *path, struct statvfs *statInfo) {
 int DedupFS::Flush(const char *path, struct fuse_file_info *fileInfo) {
   printf("flush(path=%s)\n", path);
 //	//noop because we don't maintain our own buffers
-  BlocksCache::sync();
+  bc->sync();
   return 0;
 }
 
 int DedupFS::Release(const char *path, struct fuse_file_info *fileInfo) {
   printf("release(path=%s)\n", path);
   intrusive_ptr_release((file_info*)fileInfo->fh);
-  BlocksCache::sync();
+  bc->sync();
+  std::cout << "Sqlite memory used: " << sqlite3_memory_highwater(true) << std::endl;
   return 0;
 }
 
@@ -224,7 +226,7 @@ int DedupFS::Fsync(const char *path, int datasync, struct fuse_file_info *fi) {
 //		//sync data + file metadata
 //		return RETURN_ERRNO(fsync(fi->fh));
 //	}
-  BlocksCache::sync();
+  bc->sync();
   return 0;
 }
 
@@ -294,6 +296,7 @@ int DedupFS::Readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t 
 int DedupFS::Releasedir(const char *path, struct fuse_file_info *fileInfo) {
   printf("releasedir(path=%s)\n", path);
   intrusive_ptr_release((file_info*)fileInfo->fh);
+  std::cout << "Sqlite memory used: " << sqlite3_memory_highwater(true) << std::endl;
   return 0;
 }
 
@@ -307,7 +310,7 @@ void *DedupFS::Init(struct fuse_conn_info *conn) {
 
 int DedupFS::Ftruncate(const char *path, off64_t newSize, struct fuse_file_info *fileInfo) {
   printf("ftruncate(path=%s, newSize=%ld)\n", path, newSize);
-  return BlocksCache::truncate((file_info*)fileInfo->fh, newSize);
+  return bc->truncate((file_info*)fileInfo->fh, newSize);
 }
 
 

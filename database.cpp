@@ -35,7 +35,7 @@ void DataBase::prepareStatements()
   stUpdateBlockHash.reset(db.prepareStmt("UPDATE block_hashes SET hash = ? WHERE _ID = ?"));
   stInsertBlockHash.reset(db.prepareStmt("INSERT INTO block_hashes (hash, use_count) VALUES(?, 1)"));
   stReplaceFileBlock.reset(db.prepareStmt("REPLACE INTO file_blocks (file_id, offset, hash) VALUES(?, ?, ?)"));
-
+  stUpdateFileSize.reset(db.prepareStmt("UPDATE files SET size = ? WHERE _ID = ?"));
   //.reset(db.prepareStmt(
   //.reset(db.prepareStmt(
 }
@@ -45,6 +45,11 @@ DataBase::DataBase(const string *db_url)
   assert(db_url);
   db.open(*db_url);
 
+  prepareStatements();
+}
+
+void DataBase::init()
+{
   try {
     shared_ptr<PreparedStmt> stmt(db.prepareStmt("PRAGMA journal_mode=WAL"));
     stmt->executeUpdate(true);
@@ -83,7 +88,6 @@ DataBase::DataBase(const string *db_url)
   } catch (sql::Exception &e) {
     printf("At DataBase::DataBase: %s", e.what());
   }
-  prepareStatements();
   try {
     create("/", S_IFDIR | 0755);
   } catch (exception &e) {
@@ -94,6 +98,7 @@ DataBase::DataBase(const string *db_url)
 DataBase::~DataBase()
 {
   db.close();
+  cout << std::hex << pthread_self() << std::dec << "DB close" << endl;
 }
 
 boost::intrusive_ptr<file_info> DataBase::getByPath(const path filename)
@@ -225,6 +230,12 @@ int DataBase::ftruncate(boost::intrusive_ptr<file_info> fi, off_t newSize)
     return -EINVAL;
   if (fi->st.st_size == newSize)
     return 0;
+  //shared_ptr<PreparedStmt> stmt(db.prepareStmt("UPDATE files SET size = ? WHERE _ID = ?"));
+  stUpdateFileSize->bindInt64(1, newSize);
+  stUpdateFileSize->bindInt64(2, fi->st.st_ino);
+  stUpdateFileSize->executeUpdate();
+  fi->st.st_size = newSize;
+#if 0
   db.transactionBegin(tr_exclusive);
   try {
     if (newSize < fi->st.st_size) {
@@ -260,6 +271,7 @@ int DataBase::ftruncate(boost::intrusive_ptr<file_info> fi, off_t newSize)
   }
   fi->st.st_size = newSize;
   db.transactionCommit();
+#endif
   return 0;
 }
 

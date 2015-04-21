@@ -59,11 +59,13 @@ private:
     shared_ptr<sql::PreparedStmt> stUpdateBlockHash;
     shared_ptr<sql::PreparedStmt> stInsertBlockHash;
     shared_ptr<sql::PreparedStmt> stReplaceFileBlock;
+    shared_ptr<sql::PreparedStmt> stUpdateFileSize;
     //shared_ptr<sql::PreparedStmt>
     //shared_ptr<sql::PreparedStmt>
     void prepareStatements();
 public:
     DataBase(const std::string* db_url);
+    void init();
     ~DataBase();
 
     boost::intrusive_ptr<file_info> getByPath(const boost::filesystem::path filename);

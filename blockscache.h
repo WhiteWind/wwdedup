@@ -22,6 +22,7 @@
 #include <system_error>
 #include <chrono>
 #include <condition_variable>
+#include <boost/thread.hpp>
 #include "database.h"
 #include "dedup_types.h"
 
@@ -29,7 +30,6 @@
 class BlocksCache
 {
 private:
-  static BlocksCache *_instance;
   int _storage;
   DataBase *db;
   std::mutex writerMutex;
@@ -45,29 +45,23 @@ private:
   volatile int terminated;
   thread thr;
   BlocksCache(const string *db_url);
-  ~BlocksCache();
-  off64_t _write(boost::intrusive_ptr<file_info> finfo, const char *buf, off64_t size, off64_t offset);
-  off64_t _read(boost::intrusive_ptr<file_info> finfo, char *buf, off64_t size, off64_t offset);
-  void _erase(boost::intrusive_ptr<file_info> finfo, off64_t size, off64_t offset);
-  int _truncate(boost::intrusive_ptr<file_info> finfo, off64_t newSize);
-  void _sync();
+  BlocksCache(DataBase *_db): db(_db) {}
 
   shared_ptr<storage_block> _getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t blockNum);
   block_info *_getLockedFileBlock(boost::intrusive_ptr<file_info> finfo, off64_t blockNum);
   void _writeBlock(boost::intrusive_ptr<file_info> finfo, vector<unsigned char> &data, block_info *fblock);
   void _populateStorageBlock(shared_ptr<storage_block> block);
-public:
-  static void start(const string *db_url) { if (!_instance) _instance = new BlocksCache(db_url); }
-  static void stop() { delete _instance; _instance = nullptr; }
-
-  static off64_t writeBuf(boost::intrusive_ptr<file_info> finfo, const char *buf, off64_t size, off64_t offset)
-      { return _instance->_write(finfo, buf, size, offset); }
-  static off64_t readBuf(boost::intrusive_ptr<file_info> finfo, char *buf, off64_t size, off64_t offset)
-      { return _instance->_read(finfo, buf, size, offset); }
-  static int truncate(boost::intrusive_ptr<file_info> finfo, off64_t size)
-      { return _instance->_truncate(finfo, size); }
-  static void sync() { _instance->_sync(); }
   void _writeBlockWrapper(boost::intrusive_ptr<file_info> finfo, const char *curPtr, off64_t curBlockNum, int chunkSize, int startOffset = 0);
+public:
+  ~BlocksCache();
+  static void start(const string *db_url);
+  static BlocksCache *getThreadInstance(DataBase *_db);
+  static void stop();
+
+  off64_t writeBuf(boost::intrusive_ptr<file_info> finfo, const char *buf, off64_t size, off64_t offset);
+  off64_t readBuf(boost::intrusive_ptr<file_info> finfo, char *buf, off64_t size, off64_t offset);
+  int truncate(boost::intrusive_ptr<file_info> finfo, off64_t newSize);
+  void sync();
 };
 
 #endif // BLOCKSCACHE_H

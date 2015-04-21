@@ -49,6 +49,7 @@ private:
   off64_t _write(boost::intrusive_ptr<file_info> finfo, const char *buf, off64_t size, off64_t offset);
   off64_t _read(boost::intrusive_ptr<file_info> finfo, char *buf, off64_t size, off64_t offset);
   void _erase(boost::intrusive_ptr<file_info> finfo, off64_t size, off64_t offset);
+  int _truncate(boost::intrusive_ptr<file_info> finfo, off64_t newSize);
   void _sync();
 
   shared_ptr<storage_block> _getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t blockNum);
@@ -63,8 +64,8 @@ public:
       { return _instance->_write(finfo, buf, size, offset); }
   static off64_t readBuf(boost::intrusive_ptr<file_info> finfo, char *buf, off64_t size, off64_t offset)
       { return _instance->_read(finfo, buf, size, offset); }
-  static void erase(boost::intrusive_ptr<file_info> finfo, off64_t size, off64_t offset)
-      { _instance->_erase(finfo, size, offset); }
+  static int truncate(boost::intrusive_ptr<file_info> finfo, off64_t size)
+      { return _instance->_truncate(finfo, size); }
   static void sync() { _instance->_sync(); }
   void _writeBlockWrapper(boost::intrusive_ptr<file_info> finfo, const char *curPtr, off64_t curBlockNum, int chunkSize, int startOffset = 0);
 };

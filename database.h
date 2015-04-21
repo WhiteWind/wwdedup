@@ -70,13 +70,13 @@ public:
     int rename(const boost::filesystem::path oldPath, const boost::filesystem::path newPath);
     int create(boost::filesystem::path path, mode_t mode);
     int remove(boost::filesystem::path filename);
-    int truncate(boost::filesystem::path filename, off_t newSize);
+    //int truncate(boost::filesystem::path filename, off_t newSize);
     int ftruncate(boost::intrusive_ptr<file_info> fi, off_t newSize);
     int utime(const boost::filesystem::path filename, struct utimbuf *ubuf);
     bool dirEmpty(boost::intrusive_ptr<file_info> dir);
     std::vector<boost::intrusive_ptr<file_info> > readdir(boost::intrusive_ptr<file_info> directory);
-    shared_ptr<storage_block> getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum);
-    shared_ptr<storage_block> allocateStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, shared_ptr<string> hash);
+    //shared_ptr<storage_block> getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum);
+    //shared_ptr<storage_block> allocateStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, shared_ptr<string> hash);
     void releaseStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, shared_ptr<storage_block> block);
     bool replaceStorageBlock(boost::intrusive_ptr<file_info> finfo, block_info *fblock, shared_ptr<string> hash);
     void loadFileBlock(boost::intrusive_ptr<file_info> finfo, block_info &block, int &use_count);

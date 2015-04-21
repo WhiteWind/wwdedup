@@ -85,6 +85,9 @@ int DedupFS::Unlink(const char *path) {
     return -ENOENT;
   if (S_ISDIR(fi->st.st_mode))
     return -EISDIR;
+  int res = BlocksCache::truncate(fi, 0);
+  if (res != 0)
+    return res;
   return db->remove(path);
 }
 
@@ -139,7 +142,12 @@ int DedupFS::Chown(const char *path, uid_t uid, gid_t gid) {
 
 int DedupFS::Truncate(const char *path, off_t newSize) {
   printf("truncate(path=%s, newSize=%d\n", path, (int)newSize);
-  return db->truncate(path, newSize);
+  boost::intrusive_ptr<file_info> fi = db->getByPath(path);
+  if (!fi->st.st_ino)
+    return -ENOENT;
+  if (!S_ISREG(fi->st.st_mode))
+    return -EINVAL;
+  return BlocksCache::truncate(fi, newSize);
 }
 
 int DedupFS::Utime(const char *path, struct utimbuf *ubuf) {
@@ -299,7 +307,7 @@ void *DedupFS::Init(struct fuse_conn_info *conn) {
 
 int DedupFS::Ftruncate(const char *path, off64_t newSize, struct fuse_file_info *fileInfo) {
   printf("ftruncate(path=%s, newSize=%ld)\n", path, newSize);
-  return db->ftruncate((file_info*)fileInfo->fh, newSize);
+  return BlocksCache::truncate((file_info*)fileInfo->fh, newSize);
 }
 
 

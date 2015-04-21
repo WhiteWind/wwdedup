@@ -239,9 +239,32 @@ off64_t BlocksCache::_read(boost::intrusive_ptr<file_info> finfo, char *buf, off
   return factSize;
 }
 
-void BlocksCache::_erase(boost::intrusive_ptr<file_info> finfo, off64_t size, off64_t offset)
+int BlocksCache::_truncate(boost::intrusive_ptr<file_info> finfo, off64_t newSize)
 {
-
+  if (newSize < 0)
+    return -EINVAL;
+  if (finfo->st.st_size <= newSize) {
+    finfo->st.st_size = newSize;
+    return 0;
+  }
+  off64_t startBlock = newSize ? ((newSize - 1) >> block_size_bits) + 1 : 0;
+  off64_t endBlock = finfo->st.st_size ? ((finfo->st.st_size - 1) >> block_size_bits) + 1 : 1;
+  for (off64_t curBlock = startBlock; curBlock < endBlock; curBlock++) {
+    block_info * fblock = _getLockedFileBlock(finfo, curBlock);
+    try {
+      shared_ptr<storage_block> sblock = fblock->storageBlock.lock();
+      fblock->lock.unlock();
+      if (sblock) {
+        unique_lock<mutex> guard(sblock->lock);
+        db->releaseStorageBlock(finfo, curBlock, sblock);
+      }
+    } catch (exception &e) {
+      fblock->lock.unlock();
+      throw e;
+    }
+  }
+  finfo->st.st_size = newSize;
+  return 0;
 }
 
 shared_ptr<storage_block> BlocksCache::_getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t blockNum)

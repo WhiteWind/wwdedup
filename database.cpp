@@ -209,15 +209,15 @@ int DataBase::remove(path filename)
   return 0;
 }
 
-int DataBase::truncate(path filename, off_t newSize)
-{
-  boost::intrusive_ptr<file_info> fi = getByPath(filename);
-  if (!fi->st.st_ino)
-    return -ENOENT;
-  if (!S_ISREG(fi->st.st_mode))
-    return -EBADF;
-  return ftruncate(fi, newSize);
-}
+//int DataBase::truncate(path filename, off_t newSize)
+//{
+//  boost::intrusive_ptr<file_info> fi = getByPath(filename);
+//  if (!fi->st.st_ino)
+//    return -ENOENT;
+//  if (!S_ISREG(fi->st.st_mode))
+//    return -EBADF;
+//  return ftruncate(fi, newSize);
+//}
 
 int DataBase::ftruncate(boost::intrusive_ptr<file_info> fi, off_t newSize)
 {
@@ -312,6 +312,7 @@ std::vector<boost::intrusive_ptr<file_info> > DataBase::readdir(boost::intrusive
   return res;
 }
 
+#if 0
 shared_ptr<storage_block> DataBase::getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum)
 {
   printf("getStorageBlock(f: %ld)\n", fileBlockNum);
@@ -400,6 +401,7 @@ shared_ptr<storage_block> DataBase::allocateStorageBlock(boost::intrusive_ptr<fi
     throw e;
   }
 }
+#endif
 
 bool DataBase::replaceStorageBlock(boost::intrusive_ptr<file_info> finfo, block_info *fblock, shared_ptr<string> hash)
 {

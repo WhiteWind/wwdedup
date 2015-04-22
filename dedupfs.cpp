@@ -26,15 +26,17 @@ static std::atomic_uint th_count(0);
 DedupFS* DedupFS::Instance() {
   if(!_instance.get()) {
     _instance.reset(new DedupFS());
-    if ( !cds::threading::Manager::isThreadAttached() )
-      cds::threading::Manager::attachThread();
   }
   printf("%lX: ", pthread_self());
   return _instance.get();
 }
 
-DedupFS::DedupFS() {
+DedupFS::DedupFS(): gcDHP()
+{
   printf("%lX/%d: DedupFS::DedupFS()\n", pthread_self(), ++th_count);
+  if ( !cds::threading::Manager::isThreadAttached() ) {
+    cds::threading::Manager::attachThread();
+  }
   db = new DataBase(static_cast<std::string*>(fuse_get_context()->private_data));
   bc = BlocksCache::getThreadInstance(db);
 }

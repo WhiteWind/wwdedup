@@ -18,10 +18,26 @@
 
 static boost::thread_specific_ptr<BlocksCache> _instance;
 
+int _storage;
+std::mutex writerMutex;
+std::condition_variable writerFlag;
+std::atomic_bool writeTriggered;
+cds::container::SkipListSet<cds::gc::DHP, shared_ptr<storage_block>,
+    typename cds::container::skip_list::make_traits<
+        cds::opt::compare<storage_block_comparator>,
+        cds::opt::item_counter<cds::atomicity::item_counter>
+>::type
+  > *_blocks;
+
 void BlocksCache::run(const string *db_url)
 {
-//  cds::gc::DHP::thread_gc gc;
+  cds::gc::DHP::thread_gc gc;
   cds::threading::Manager::attachThread();
+  //FIXME: race condition
+  _blocks = new cds::container::SkipListSet<cds::gc::DHP, shared_ptr<storage_block>,
+      typename cds::container::skip_list::make_traits<
+          cds::opt::compare<storage_block_comparator>,
+          cds::opt::item_counter<cds::atomicity::item_counter> >::type>();
   unique_lock<mutex> lck(writerMutex);
   time_t mintime;
   bool repeat = false;
@@ -34,7 +50,7 @@ void BlocksCache::run(const string *db_url)
     //cout << "Writer woke up" << endl;
     mintime = time(nullptr);
     try {
-      for (auto iter = _blocks.begin(); iter != _blocks.end(); ++iter) {
+      for (auto iter = _blocks->begin(); iter != _blocks->end(); ++iter) {
         shared_ptr<storage_block> block = *iter;
         unique_lock<mutex> guard(block->lock);
         mintime = min(mintime, block->atime);
@@ -46,10 +62,10 @@ void BlocksCache::run(const string *db_url)
           block->dirty = false;
         }
       }
-      cout << "Cached blocks count: " << _blocks.size() << endl;
-      if (_blocks.size() > 500) {
+      cout << "Cached blocks count: " << _blocks->size() << endl;
+      if (_blocks->size() > 500) {
         vector<shared_ptr<storage_block> > toDelete;
-        for (auto iter = _blocks.begin(); iter != _blocks.end(); ++iter) {
+        for (auto iter = _blocks->begin(); iter != _blocks->end(); ++iter) {
           if (toDelete.size() > 63)
             break;
           shared_ptr<storage_block> block = *iter;
@@ -64,9 +80,9 @@ void BlocksCache::run(const string *db_url)
         }
         for (auto iter : toDelete) {
           cout << "Releasing storage block " << *iter << endl;
-          _blocks.erase(iter);
+          _blocks->erase(iter);
         }
-        if (_blocks.size() > 500)
+        if (_blocks->size() > 500)
           repeat = true;
       }
       this_thread::sleep_for(chrono::milliseconds(1));
@@ -110,7 +126,8 @@ BlocksCache::BlocksCache(const string *db_url)
 BlocksCache::~BlocksCache()
 {
   terminated = true;
-  thr.join();
+  if (thr.joinable())
+    thr.join();
   close(_storage);
 }
 
@@ -156,12 +173,12 @@ void BlocksCache::_writeBlock(boost::intrusive_ptr<file_info> finfo, vector<unsi
   if (db->replaceStorageBlock(finfo, fblock, hash)) {
     // block with this hash already present
     shared_ptr<storage_block> tmp = make_shared<storage_block>(fblock->storageBlockNum);
-    _blocks.find(tmp, [&](shared_ptr<storage_block> item, shared_ptr<storage_block>){
+    _blocks->find(tmp, [&](shared_ptr<storage_block> item, shared_ptr<storage_block>){
       item->use_count++;
     });
   } else {
     // need to write block. If old block is released, database sets it's use_count to 0
-    _blocks.ensure(make_shared<storage_block>(fblock->storageBlockNum), [&](bool bNew, shared_ptr<storage_block> &item, const shared_ptr<storage_block>){
+    _blocks->ensure(make_shared<storage_block>(fblock->storageBlockNum), [&](bool bNew, shared_ptr<storage_block> &item, const shared_ptr<storage_block>){
       unique_lock<mutex> guard(item->lock);
       item->data = move(data);
       item->hash = hash;
@@ -322,7 +339,7 @@ block_info *BlocksCache::_getLockedFileBlock(boost::intrusive_ptr<file_info> fin
   if (!fblock->storageBlock.expired())
     return fblock;
 
-  _blocks.ensure(make_shared<storage_block>(fblock->storageBlockNum),
+  _blocks->ensure(make_shared<storage_block>(fblock->storageBlockNum),
                  [&](bool bNew, shared_ptr<storage_block> &item, shared_ptr<storage_block>) {
     unique_lock<mutex> guard(item->lock);
     if (bNew && !item->loaded) {

@@ -43,6 +43,7 @@ private:
 
   DataBase *db;
   BlocksCache *bc;
+  cds::gc::DHP gcDHP;
 
 public:
   static DedupFS *Instance();

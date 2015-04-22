@@ -18,19 +18,7 @@
 #ifndef DATABASE_H
 #define DATABASE_H
 
-#include <dirent.h>
-#include <stdio.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <string>
-#include <libgen.h>
-#include <errno.h>
-#include <time.h>
-#include <cstring>
-#include <sstream>
-#include <boost/filesystem/path.hpp>
-#include <boost/smart_ptr.hpp>
-#include <utime.h>
+#include "pre.h"
 
 #include "SqlField.h"
 #include "SqlTable.h"

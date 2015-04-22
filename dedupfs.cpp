@@ -15,7 +15,6 @@
  *   along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <boost/thread/tss.hpp>
 #include "dedupfs.h"
 
 static boost::thread_specific_ptr<DedupFS> _instance;

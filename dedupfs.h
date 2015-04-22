@@ -19,22 +19,8 @@
 
 #define FUSE_USE_VERSION 26
 
-#include <ctype.h>
-#include <dirent.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <fuse.h>
-#include <limits.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/xattr.h>
-#include <pthread.h>
-#include <atomic>
-#include <cds/gc/dhp.h>
-#include <cds/container/skip_list_map_dhp.h>
+#include "pre.h"
+
 #include "database.h"
 #include "blockscache.h"
 

@@ -17,12 +17,8 @@
 #ifndef BLOCKSCACHE_H
 #define BLOCKSCACHE_H
 
-#include <string>
-#include <exception>
-#include <system_error>
-#include <chrono>
-#include <condition_variable>
-#include <boost/thread.hpp>
+#include "pre.h"
+#include "MurmurHash3.h"
 #include "database.h"
 #include "dedup_types.h"
 

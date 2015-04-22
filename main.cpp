@@ -15,10 +15,7 @@
  *   along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <cds/init.h>       // for cds::Initialize and cds::Terminate
-#include <cds/gc/dhp.h>      // for cds::HP (Hazard Pointer) SMR
-#include <fuse.h>
-#include <stdio.h>
+#include "pre.h"
 
 #include "wrap.h"
 #include "SqlCommon.h"

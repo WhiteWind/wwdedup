@@ -17,12 +17,7 @@
 #ifndef DEDUP_TYPES_H
 #define DEDUP_TYPES_H
 
-#include <iostream>
-#include <cds/gc/dhp.h>
-#include <cds/container/skip_list_set_dhp.h>
-#include <boost/filesystem.hpp>
-#include <fcntl.h>
-#include "MurmurHash3.h"
+#include "pre.h"
 
 #define HASH_SEED 0xad64fac3
 

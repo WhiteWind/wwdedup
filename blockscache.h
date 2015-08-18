@@ -30,8 +30,11 @@ private:
   void run(const string *db_url);
   volatile int terminated;
   thread thr;
-  BlocksCache(const string *db_url);
-  BlocksCache(DataBase *_db): db(_db) {}
+  int block_size;
+  int block_size_bits;
+  BlocksCache(const string *db_url, int _block_size_bits);
+  BlocksCache(DataBase *_db, int _block_size_bits)
+    : db(_db), block_size(1 << _block_size_bits), block_size_bits(_block_size_bits) {}
 
   shared_ptr<storage_block> _getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t blockNum);
   block_info *_getLockedFileBlock(boost::intrusive_ptr<file_info> finfo, off64_t blockNum);
@@ -40,8 +43,8 @@ private:
   void _writeBlockWrapper(boost::intrusive_ptr<file_info> finfo, const char *curPtr, off64_t curBlockNum, int chunkSize, int startOffset = 0);
 public:
   ~BlocksCache();
-  static void start(const string *db_url);
-  static BlocksCache *getThreadInstance(DataBase *_db);
+  static void start(const string *db_url, int block_size_bits);
+  static BlocksCache *getThreadInstance(DataBase *_db, int _block_size_bits);
   static void stop();
 
   off64_t writeBuf(boost::intrusive_ptr<file_info> finfo, const char *buf, off64_t size, off64_t offset);

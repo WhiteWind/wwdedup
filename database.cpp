@@ -47,6 +47,7 @@ DataBase::DataBase(const string *db_url)
   assert(db_url);
   db.open(*db_url);
 
+  block_size = ((dedupfs_options*)fuse_get_context())->block_size;
   std::call_once(init_flag, &DataBase::init, this);
   prepareStatements();
   try {
@@ -487,27 +488,32 @@ bool DataBase::replaceStorageBlock(boost::intrusive_ptr<file_info> finfo, block_
   }
 }
 
-void DataBase::releaseStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, shared_ptr<storage_block> block)
+off64_t DataBase::releaseStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum)
 {
-  printf("releaseStorageBlock(f: %ld, s: %ld)\n", fileBlockNum, block->storageBlockNum);
+  printf("releaseStorageBlock(f: %ld)\n", fileBlockNum);
   db.transactionBegin(tr_exclusive);
   try {
+    block_info fileBlock(fileBlockNum);
+    cds::container::SkipListSet<cds::gc::DHP, block_info>::guarded_ptr gp(finfo->blocks.extract(fileBlock));
+    if (gp) {
+      fileBlock.empty = gp->empty;
+      fileBlock.hash = gp->hash;
+      fileBlock.storageBlockNum = gp->storageBlockNum;
+    } else {
+      int dummy;
+      loadFileBlock(finfo, fileBlock, dummy);
+    }
+
     //shared_ptr<PreparedStmt> stmt(db.prepareStmt("DELETE FROM file_blocks WHERE file_id = ? AND offset = ?"));
     stDeleteFileBlock->bindInt64(1, finfo->st.st_ino);
     stDeleteFileBlock->bindInt64(2, fileBlockNum);
     stDeleteFileBlock->executeUpdate();
 
     //stmt.reset(db.prepareStmt("UPDATE block_hashes SET use_count = use_count - 1 WHERE hash = ?"));
-    stDecreaseUseCount->bindBlob(1, *(block->hash));
+    stDecreaseUseCount->bindBlob(1, *fileBlock.hash);
     stDecreaseUseCount->executeUpdate();
     db.transactionCommit();
-    block->use_count--;
-    finfo->blocks.find(fileBlockNum, [](block_info &item, off64_t key) {
-      unique_lock<mutex> guard(item.lock);
-      item.hash.reset();
-      item.empty = true;
-      item.storageBlockNum = 0;
-    });
+    return fileBlock.storageBlockNum;
   } catch (exception &e) {
     db.transactionRollback();
     throw e;
@@ -518,7 +524,7 @@ void DataBase::loadFileBlock(boost::intrusive_ptr<file_info> finfo, block_info &
 {
   printf("loadFileBlock(f: %ld)\n", block.fileBlockNum);
 
-  if (block.fileBlockNum * block_size() > finfo->st.st_size) {
+  if (block.fileBlockNum * block_size > finfo->st.st_size) {
     block.empty = true;
     block.storageBlockNum = 0;
     use_count = 0;

@@ -23,13 +23,11 @@
 
 using namespace std;
 
-
-#define block_size_bits 16
-
-static int block_size()
-{
-  return 1 << block_size_bits;
-}
+struct dedupfs_options {
+  int block_size_bits;
+  int block_size;
+  string db_url;
+};
 
 struct storage_block {
   off64_t storageBlockNum;

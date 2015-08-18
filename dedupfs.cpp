@@ -36,8 +36,8 @@ DedupFS::DedupFS(): gcDHP()
   if ( !cds::threading::Manager::isThreadAttached() ) {
     cds::threading::Manager::attachThread();
   }
-  db = new DataBase(static_cast<std::string*>(fuse_get_context()->private_data));
-  bc = BlocksCache::getThreadInstance(db);
+  db = new DataBase(&((dedupfs_options*)(fuse_get_context()->private_data))->db_url);
+  bc = BlocksCache::getThreadInstance(db, ((dedupfs_options*)(fuse_get_context()->private_data))->block_size_bits);
 }
 
 DedupFS::~DedupFS() {

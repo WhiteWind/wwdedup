@@ -19,7 +19,8 @@ aux_source_directory(easySQLite SRC_LIST)
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -Winvalid-pch -fexceptions -fno-strict-aliasing -mcx16")
 SET(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
-SET(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -D_DEBUG -fsanitize=thread -fno-omit-frame-pointer -fPIE -pie")
+SET(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -D_DEBUG -fno-omit-frame-pointer -fPIE -pie")
+#-fsanitize=thread
 
 aux_source_directory(libcds/src CDS_SRC_LIST)
 

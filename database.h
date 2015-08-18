@@ -50,6 +50,7 @@ private:
     shared_ptr<sql::PreparedStmt> stUpdateFileSize;
     //shared_ptr<sql::PreparedStmt>
     //shared_ptr<sql::PreparedStmt>
+    int block_size;
     void prepareStatements();
 public:
     DataBase(const std::string* db_url);
@@ -67,7 +68,7 @@ public:
     std::vector<boost::intrusive_ptr<file_info> > readdir(boost::intrusive_ptr<file_info> directory);
     //shared_ptr<storage_block> getStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum);
     //shared_ptr<storage_block> allocateStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, shared_ptr<string> hash);
-    void releaseStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum, shared_ptr<storage_block> block);
+    off64_t releaseStorageBlock(boost::intrusive_ptr<file_info> finfo, off64_t fileBlockNum);
     bool replaceStorageBlock(boost::intrusive_ptr<file_info> finfo, block_info *fblock, shared_ptr<string> hash);
     void loadFileBlock(boost::intrusive_ptr<file_info> finfo, block_info &block, int &use_count);
 };

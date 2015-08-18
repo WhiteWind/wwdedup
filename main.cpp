@@ -95,9 +95,14 @@ int main(int argc, char *argv[]) {
     }
     argc--;
 
-    BlocksCache::start(&dbUrl);
+    dedupfs_options opts;
+    opts.block_size_bits = 16;
+    opts.block_size = 1 << opts.block_size_bits;
+    opts.db_url = dbUrl;
 
-    fuse_stat = fuse_main(argc, argv, &examplefs_oper, &dbUrl);
+    BlocksCache::start(&dbUrl, opts.block_size_bits);
+
+    fuse_stat = fuse_main(argc, argv, &examplefs_oper, &opts);
 
     printf("fuse_main returned %d\n", fuse_stat);
 //    delete db;
